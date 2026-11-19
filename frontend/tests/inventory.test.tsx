@@ -2,29 +2,61 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchBackendHealth } from "../src/api/health";
+import { getSKUs, getWarehouses } from "../src/api/warehouse";
 import App from "../src/app/App";
 
 vi.mock("../src/api/health", () => ({
   fetchBackendHealth: vi.fn(),
 }));
 
+vi.mock("../src/api/warehouse", () => ({
+  getWarehouses: vi.fn(),
+  getSKUs: vi.fn(),
+  getZones: vi.fn(),
+  getBins: vi.fn(),
+  getExpectedInventory: vi.fn(),
+}));
+
 const mockedHealth = vi.mocked(fetchBackendHealth);
 
-describe("inventory module status", () => {
+describe("warehouse dashboard status", () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+
     mockedHealth.mockResolvedValue({
       status: "ok",
       service: "waretrace-api",
       version: "0.1.0",
     });
+
+    vi.mocked(getWarehouses).mockResolvedValue({
+      items: [],
+      page: 1,
+      page_size: 100,
+      total: 0,
+    });
+
+    vi.mocked(getSKUs).mockResolvedValue({
+      items: [],
+      page: 1,
+      page_size: 100,
+      total: 0,
+    });
   });
 
-  it("keeps inventory marked as planned until implemented", () => {
+  it("shows active warehouse work and marks later modules as planned", async () => {
     render(<App />);
 
     expect(
-      screen.getByRole("heading", { name: "Inventory & Handling Units" }),
+      await screen.findByRole("heading", {
+        name: "Warehouse intelligence starts with reliable data.",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Planned")).toHaveLength(6);
+
+    expect(
+      screen.getByRole("heading", { name: "Warehouse Operations" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("In development")).toBeInTheDocument();
+    expect(screen.getAllByText("Planned")).toHaveLength(5);
   });
 });
