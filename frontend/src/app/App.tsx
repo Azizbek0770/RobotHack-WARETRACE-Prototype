@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 
 import {
@@ -5,14 +6,21 @@ import {
   type HealthResponse,
 } from "../api/health";
 import DashboardPage from "../features/dashboard/DashboardPage";
+import HandlingUnitsPage from "../features/handling-units/HandlingUnitsPage";
 import InventoryPage from "../features/inventory/InventoryPage";
 
-type View = "dashboard" | "inventory";
+type View = "dashboard" | "inventory" | "handling-units";
 
 type Connection =
   | { status: "loading" }
   | { status: "online"; data: HealthResponse }
   | { status: "offline"; message: string };
+
+const navigation: { id: View; label: string }[] = [
+  { id: "dashboard", label: "Overview" },
+  { id: "inventory", label: "Inventory & Locations" },
+  { id: "handling-units", label: "Handling Units" },
+];
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
@@ -47,7 +55,7 @@ export default function App() {
 
   function retryConnection() {
     setConnection({ status: "loading" });
-    setAttempt((current) => current + 1);
+    setAttempt((value) => value + 1);
   }
 
   return (
@@ -64,22 +72,19 @@ export default function App() {
         </div>
 
         <nav className="app-nav" aria-label="Main navigation">
-          <button
-            type="button"
-            className={view === "dashboard" ? "nav-active" : ""}
-            aria-current={view === "dashboard" ? "page" : undefined}
-            onClick={() => setView("dashboard")}
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            className={view === "inventory" ? "nav-active" : ""}
-            aria-current={view === "inventory" ? "page" : undefined}
-            onClick={() => setView("inventory")}
-          >
-            Inventory &amp; Locations
-          </button>
+          {navigation.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={view === item.id ? "nav-active" : ""}
+              aria-current={
+                view === item.id ? "page" : undefined
+              }
+              onClick={() => setView(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
         </nav>
 
         <div className="connection-control">
@@ -101,9 +106,8 @@ export default function App() {
 
           {connection.status === "offline" && (
             <button
-              className="secondary-button"
               type="button"
-              title={connection.message}
+              className="secondary-button"
               onClick={retryConnection}
             >
               Retry
@@ -113,12 +117,16 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        {view === "dashboard" ? <DashboardPage /> : <InventoryPage />}
+        {view === "dashboard" && <DashboardPage />}
+        {view === "inventory" && <InventoryPage />}
+        {view === "handling-units" && <HandlingUnitsPage />}
       </main>
 
       <footer className="footer">
         <span>WARETRACE · Warehouse Intelligence</span>
-        <span>Operational records are not physical audit evidence</span>
+        <span>
+          Operational records are not physical audit evidence
+        </span>
       </footer>
     </div>
   );

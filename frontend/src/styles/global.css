@@ -503,3 +503,161 @@ button:focus-visible {
     margin-left: 0;
   }
 }
+
+/* S01-C2 — Handling Unit Operations */
+
+.hu-layout {
+  display: grid;
+  grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.3fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.hu-search {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.hu-search .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.hu-search .secondary-button {
+  margin-top: 0;
+  min-height: 42px;
+}
+
+.hu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 440px;
+  overflow-y: auto;
+}
+
+.hu-list-item {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #30435c;
+  border-radius: 10px;
+  background: #101c2e;
+  color: #e9eef7;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.hu-list-item:hover:not(:disabled) {
+  background: #1a2d46;
+}
+
+.hu-list-item--active {
+  border-color: #5396f0;
+  background: #203858;
+}
+
+.hu-list-item span {
+  color: #b4c5d8;
+  font-size: 13px;
+}
+
+.hu-list-item small {
+  color: #8db9f4;
+}
+
+.hu-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.primary-button {
+  border: 1px solid #3c83ff;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #fff;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #3478f6;
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hu-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.hu-detail-grid > div {
+  padding: 12px;
+  background: #101c2e;
+  border: 1px solid #293b54;
+  border-radius: 9px;
+  min-width: 0;
+}
+
+.hu-detail-grid span {
+  display: block;
+  color: #96a9c1;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.hu-detail-grid strong {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.hu-movement {
+  margin-top: 26px;
+  border-top: 1px solid #304158;
+  padding-top: 20px;
+}
+
+.hu-movement h3 {
+  font-size: 17px;
+  margin: 0 0 16px;
+}
+
+.hu-movement .primary-button {
+  margin-top: 14px;
+}
+
+.notice--success {
+  background: #132c29;
+  border-color: #306b60;
+  color: #b1f2dc;
+}
+
+@media (max-width: 900px) {
+  .hu-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .hu-search {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hu-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
