@@ -4,12 +4,15 @@ const API_BASE_URL = (
 ).replace(/\/+$/, "");
 
 export class ApiError extends Error {
+  readonly status?: number;
+
   constructor(
     message: string,
-    public readonly status?: number,
+    status?: number,
   ) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
   }
 }
 

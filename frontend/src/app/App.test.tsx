@@ -9,6 +9,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchBackendHealth } from "../api/health";
 import {
+  getHandlingUnit,
+  getHUEvents,
+  listHandlingUnits,
+} from "../api/handlingUnits";
+import {
   getBins,
   getExpectedInventory,
   getSKUs,
@@ -27,6 +32,14 @@ vi.mock("../api/warehouse", () => ({
   getZones: vi.fn(),
   getBins: vi.fn(),
   getExpectedInventory: vi.fn(),
+}));
+
+vi.mock("../api/handlingUnits", () => ({
+  createHandlingUnit: vi.fn(),
+  getHandlingUnit: vi.fn(),
+  getHUEvents: vi.fn(),
+  listHandlingUnits: vi.fn(),
+  moveHandlingUnit: vi.fn(),
 }));
 
 const warehouseId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -121,6 +134,36 @@ beforeEach(() => {
     page_size: 100,
     total: 1,
   });
+
+  vi.mocked(listHandlingUnits).mockResolvedValue({
+    items: [],
+    page: 1,
+    page_size: 100,
+    total: 0,
+  });
+
+  vi.mocked(getHandlingUnit).mockResolvedValue({
+    id: "hu-1",
+    external_code: "HU-0001",
+    sku_id: skuId,
+    bin_id: null,
+    quantity: 5,
+    status: "RECEIVED",
+    version: 1,
+    sku: {
+    id: skuId,
+    code: "SKU-001",
+    name: "Calibration Kit",
+    },
+    bin: null,
+  });
+
+  vi.mocked(getHUEvents).mockResolvedValue({
+    items: [],
+    page: 1,
+    page_size: 100,
+    total: 0,
+  });
 });
 
 describe("WARETRACE operational frontend", () => {
@@ -176,6 +219,22 @@ describe("WARETRACE operational frontend", () => {
 
     expect(
       screen.getByLabelText("Zone"),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates to handling-unit operations", async () => {
+    render(<App />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Handling Units",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Handling Units",
+      }),
     ).toBeInTheDocument();
   });
 

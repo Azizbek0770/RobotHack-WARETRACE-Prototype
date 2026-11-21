@@ -1,5 +1,10 @@
-
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import {
   createHandlingUnit,
@@ -22,6 +27,8 @@ import {
 interface Destination {
   id: string;
   warehouseId: string;
+  groupLabel: string;
+  binCode: string;
   label: string;
 }
 
@@ -40,6 +47,7 @@ type ListState =
   | { kind: "ready"; page: Page<HandlingUnit> };
 
 type Detail =
+  | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | {
@@ -48,31 +56,59 @@ type Detail =
       events: Page<WarehouseEvent>;
     };
 
+type ActiveAction = "idle" | "registering" | "moving";
+
+const HU_CODE_PATTERN = /^[A-Z0-9][A-Z0-9._-]{2,119}$/;
+
 function errorText(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Unexpected operation failure";
 }
 
+function formatEventType(eventType: string): string {
+  return eventType
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString();
+}
+
+function statusBadgeClass(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === "stored") return "status-badge status-badge--stored";
+  if (normalized === "received") return "status-badge status-badge--received";
+  if (normalized === "shipped" || normalized === "consumed") {
+    return "status-badge status-badge--closed";
+  }
+  return "status-badge";
+}
+
 export default function HandlingUnitsPage() {
   const [catalog, setCatalog] = useState<Catalog>({
     kind: "loading",
   });
-
   const [list, setList] = useState<ListState>({
     kind: "loading",
   });
-
   const [detail, setDetail] = useState<Detail>({
-    kind: "loading",
+    kind: "idle",
   });
 
   const [searchText, setSearchText] = useState("");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(
     null,
   );
 
+  const [catalogRefresh, setCatalogRefresh] = useState(0);
   const [listRefresh, setListRefresh] = useState(0);
   const [detailRefresh, setDetailRefresh] = useState(0);
 
@@ -81,9 +117,22 @@ export default function HandlingUnitsPage() {
   const [newQuantity, setNewQuantity] = useState("1");
   const [targetBinId, setTargetBinId] = useState("");
 
-  const [busy, setBusy] = useState(false);
+  const [activeAction, setActiveAction] =
+    useState<ActiveAction>("idle");
   const [notice, setNotice] = useState("");
   const [actionError, setActionError] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const copyTimerRef = useRef<number | null>(null);
+  const busy = activeAction !== "idle";
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Load product and valid storage-destination choices.
   useEffect(() => {
@@ -114,11 +163,15 @@ export default function HandlingUnitsPage() {
 
                   return bins
                     .filter((bin) => bin.is_accessible)
-                    .map((bin): Destination => ({
-                      id: bin.id,
-                      warehouseId: warehouse.id,
-                      label: `${warehouse.code} / ${zone.code} / ${bin.code}`,
-                    }));
+                    .map(
+                      (bin): Destination => ({
+                        id: bin.id,
+                        warehouseId: warehouse.id,
+                        groupLabel: `${warehouse.code} / ${zone.code}`,
+                        binCode: bin.code,
+                        label: `${warehouse.code} / ${zone.code} / ${bin.code}`,
+                      }),
+                    );
                 }),
             );
 
@@ -145,7 +198,7 @@ export default function HandlingUnitsPage() {
 
     void loadCatalog();
     return () => controller.abort();
-  }, []);
+  }, [catalogRefresh]);
 
   // List and search handling units.
   useEffect(() => {
@@ -162,12 +215,15 @@ export default function HandlingUnitsPage() {
 
         setList({ kind: "ready", page });
 
-        setSelectedId((current) =>
-          current &&
-          page.items.some((item) => item.id === current)
-            ? current
-            : (page.items[0]?.id ?? null),
-        );
+        setSelectedId((current) => {
+          if (
+            current &&
+            page.items.some((item) => item.id === current)
+          ) {
+            return current;
+          }
+          return page.items[0]?.id ?? null;
+        });
       } catch (error) {
         if (!controller.signal.aborted) {
           setList({
@@ -184,15 +240,19 @@ export default function HandlingUnitsPage() {
 
   // Load selected HU and its event history.
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      setDetail({ kind: "idle" });
+      return;
+    }
 
+    const huId = selectedId;
     const controller = new AbortController();
 
     async function loadDetail() {
       try {
         const [hu, events] = await Promise.all([
-          getHandlingUnit(selectedId, controller.signal),
-          getHUEvents(selectedId, controller.signal),
+          getHandlingUnit(huId, controller.signal),
+          getHUEvents(huId, controller.signal),
         ]);
 
         if (!controller.signal.aborted) {
@@ -212,12 +272,37 @@ export default function HandlingUnitsPage() {
     return () => controller.abort();
   }, [selectedId, detailRefresh]);
 
-  function selectHU(id: string) {
-    setSelectedId(id);
+  function retryCatalog() {
+    setCatalog({ kind: "loading" });
+    setCatalogRefresh((value) => value + 1);
+  }
+
+  function refreshList() {
+    setList({ kind: "loading" });
+    setListRefresh((value) => value + 1);
+  }
+
+  function refreshDetail() {
+    if (!selectedId) return;
     setDetail({ kind: "loading" });
+    setDetailRefresh((value) => value + 1);
+  }
+
+  function selectHU(id: string) {
     setTargetBinId("");
     setActionError("");
     setNotice("");
+    setCopiedCode(false);
+
+    if (id === selectedId) {
+      if (detail.kind === "error") {
+        refreshDetail();
+      }
+      return;
+    }
+
+    setSelectedId(id);
+    setDetail({ kind: "loading" });
   }
 
   function applySearch(event: FormEvent<HTMLFormElement>) {
@@ -227,14 +312,39 @@ export default function HandlingUnitsPage() {
     setListRefresh((value) => value + 1);
   }
 
+  function clearSearch() {
+    setSearchText("");
+    setStatusFilter("ALL");
+    setList({ kind: "loading" });
+    setSearch("");
+    setListRefresh((value) => value + 1);
+  }
+
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(true);
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopiedCode(false);
+      }, 1800);
+    } catch {
+      setActionError("Could not copy HU label to clipboard.");
+    }
+  }
+
   async function registerHU(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const code = newCode.trim().toUpperCase();
     const quantity = Number(newQuantity);
 
-    if (!/^[A-Z0-9][A-Z0-9._-]{2,119}$/.test(code)) {
-      setActionError("Use a valid HU label, such as HU-0021.");
+    if (!HU_CODE_PATTERN.test(code)) {
+      setActionError(
+        "Use 3–120 characters starting with a letter or number (e.g., HU-0021).",
+      );
       return;
     }
 
@@ -247,7 +357,7 @@ export default function HandlingUnitsPage() {
       return;
     }
 
-    setBusy(true);
+    setActiveAction("registering");
     setActionError("");
     setNotice("");
 
@@ -260,17 +370,20 @@ export default function HandlingUnitsPage() {
 
       setNewCode("");
       setNewQuantity("1");
+      setStatusFilter("ALL");
       setSearchText(created.external_code);
       setSearch(created.external_code);
       setSelectedId(created.id);
       setDetail({ kind: "loading" });
       setDetailRefresh((value) => value + 1);
       setListRefresh((value) => value + 1);
-      setNotice(`Handling unit ${created.external_code} registered.`);
+      setNotice(
+        `Handling unit ${created.external_code} registered.`,
+      );
     } catch (error) {
       setActionError(errorText(error));
     } finally {
-      setBusy(false);
+      setActiveAction("idle");
     }
   }
 
@@ -279,7 +392,7 @@ export default function HandlingUnitsPage() {
 
     const hu = detail.hu;
 
-    setBusy(true);
+    setActiveAction("moving");
     setActionError("");
     setNotice("");
 
@@ -294,15 +407,15 @@ export default function HandlingUnitsPage() {
       setDetailRefresh((value) => value + 1);
       setListRefresh((value) => value + 1);
       setNotice(
-        `${updated.external_code} booked to storage. Version ${updated.version}.`,
+        `${updated.external_code} booked to storage (v${updated.version}).`,
       );
     } catch (error) {
       setActionError(errorText(error));
-
-      // Refresh the version even after a conflict.
+      // Sync latest version & state in background after conflict.
       setDetailRefresh((value) => value + 1);
+      setListRefresh((value) => value + 1);
     } finally {
-      setBusy(false);
+      setActiveAction("idle");
     }
   }
 
@@ -315,23 +428,63 @@ export default function HandlingUnitsPage() {
     selected?.status === "RECEIVED" ||
     selected?.status === "STORED";
 
-  const destinations =
-    catalog.kind === "ready"
-      ? catalog.destinations.filter((destination) => {
-          if (destination.id === selected?.bin_id) return false;
+  const destinationById = useMemo(() => {
+    if (catalog.kind !== "ready") {
+      return new Map<string, Destination>();
+    }
+    return new Map(
+      catalog.destinations.map((item) => [item.id, item]),
+    );
+  }, [catalog]);
 
-          if (!selected?.bin_id) return true;
+  const groupedDestinations = useMemo(() => {
+    if (catalog.kind !== "ready") return [];
 
-          const current = catalog.destinations.find(
-            (item) => item.id === selected.bin_id,
-          );
+    const currentBin = selected?.bin_id
+      ? destinationById.get(selected.bin_id)
+      : undefined;
 
-          return (
-            !current ||
-            destination.warehouseId === current.warehouseId
-          );
-        })
-      : [];
+    const eligible = catalog.destinations.filter((destination) => {
+      if (destination.id === selected?.bin_id) return false;
+      if (!currentBin) return true;
+      return destination.warehouseId === currentBin.warehouseId;
+    });
+
+    const groups = new Map<string, Destination[]>();
+    for (const dest of eligible) {
+      const bucket = groups.get(dest.groupLabel) ?? [];
+      bucket.push(dest);
+      groups.set(dest.groupLabel, bucket);
+    }
+
+    return Array.from(groups.entries());
+  }, [catalog, destinationById, selected?.bin_id]);
+
+  const availableStatuses = useMemo(() => {
+    if (list.kind !== "ready") return [];
+    const unique = new Set(
+      list.page.items.map((item) => item.status),
+    );
+    return Array.from(unique).sort();
+  }, [list]);
+
+  const visibleItems = useMemo(() => {
+    if (list.kind !== "ready") return [];
+    if (statusFilter === "ALL") return list.page.items;
+    return list.page.items.filter(
+      (item) => item.status === statusFilter,
+    );
+  }, [list, statusFilter]);
+
+  const recordedBinLabel = selected?.bin_id
+    ? (destinationById.get(selected.bin_id)?.label ??
+      selected.bin?.code ??
+      "Unassigned")
+    : (selected?.bin?.code ?? "Unassigned");
+
+  const codeTrimmed = newCode.trim().toUpperCase();
+  const codeInvalid =
+    codeTrimmed.length > 0 && !HU_CODE_PATTERN.test(codeTrimmed);
 
   return (
     <section className="warehouse-page">
@@ -356,25 +509,64 @@ export default function HandlingUnitsPage() {
       </div>
 
       {notice && (
-        <div className="notice notice--success" role="status">
-          {notice}
+        <div
+          className="notice notice--success notice--dismissible"
+          role="status"
+        >
+          <span>{notice}</span>
+          <button
+            type="button"
+            className="notice-dismiss"
+            onClick={() => setNotice("")}
+            aria-label="Dismiss status message"
+          >
+            ×
+          </button>
         </div>
       )}
 
       {actionError && (
-        <div className="notice notice--error" role="alert">
-          {actionError}
+        <div
+          className="notice notice--error notice--dismissible"
+          role="alert"
+        >
+          <span>{actionError}</span>
+          <button
+            type="button"
+            className="notice-dismiss"
+            onClick={() => setActionError("")}
+            aria-label="Dismiss error message"
+          >
+            ×
+          </button>
         </div>
       )}
 
       <div className="hu-layout">
         <div>
-          <section className="panel">
+          <section
+            className="panel"
+            aria-busy={list.kind === "loading"}
+          >
             <div className="panel-heading">
               <h2>Find Handling Units</h2>
-              {list.kind === "ready" && (
-                <span>{list.page.total} records</span>
-              )}
+              <div className="panel-actions">
+                {list.kind === "ready" && (
+                  <span>
+                    {statusFilter === "ALL"
+                      ? `${list.page.total} records`
+                      : `${visibleItems.length} of ${list.page.items.length} shown`}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={refreshList}
+                  disabled={list.kind === "loading" || busy}
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
 
             <form onSubmit={applySearch} className="hu-search">
@@ -393,64 +585,134 @@ export default function HandlingUnitsPage() {
               <button
                 type="submit"
                 className="secondary-button"
+                disabled={busy}
               >
                 Search
               </button>
+              {(search || searchText) && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={clearSearch}
+                  disabled={busy}
+                >
+                  Clear
+                </button>
+              )}
             </form>
+
+            {availableStatuses.length > 1 && (
+              <div
+                className="hu-filter-bar"
+                role="group"
+                aria-label="Filter by status"
+              >
+                <button
+                  type="button"
+                  className={
+                    statusFilter === "ALL"
+                      ? "filter-chip filter-chip--active"
+                      : "filter-chip"
+                  }
+                  onClick={() => setStatusFilter("ALL")}
+                >
+                  All
+                </button>
+                {availableStatuses.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={
+                      statusFilter === status
+                        ? "filter-chip filter-chip--active"
+                        : "filter-chip"
+                    }
+                    onClick={() => setStatusFilter(status)}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {list.kind === "loading" && (
               <p role="status">Loading handling units...</p>
             )}
 
             {list.kind === "error" && (
-              <p role="alert" className="error-text">
-                {list.message}
-              </p>
+              <div role="alert" className="inline-error">
+                <p className="error-text">{list.message}</p>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={refreshList}
+                >
+                  Retry
+                </button>
+              </div>
             )}
 
             {list.kind === "ready" && (
               <>
-                {list.page.items.length === 0 ? (
+                {visibleItems.length === 0 ? (
                   <p className="muted">
-                    No matching handling units.
+                    {statusFilter !== "ALL"
+                      ? `No ${statusFilter} handling units in the current results.`
+                      : "No matching handling units."}
                   </p>
                 ) : (
                   <div className="hu-list">
-                    {list.page.items.map((hu) => (
-                      <button
-                        key={hu.id}
-                        type="button"
-                        disabled={busy}
-                        className={
-                          selectedId === hu.id
-                            ? "hu-list-item hu-list-item--active"
-                            : "hu-list-item"
-                        }
-                        onClick={() => selectHU(hu.id)}
-                      >
-                        <strong>{hu.external_code}</strong>
-                        <span>
-                          {hu.sku.code} · Qty {hu.quantity}
-                        </span>
-                        <small>
-                          {hu.status} · v{hu.version}
-                        </small>
-                      </button>
-                    ))}
+                    {visibleItems.map((hu) => {
+                      const isActive = selectedId === hu.id;
+                      return (
+                        <button
+                          key={hu.id}
+                          type="button"
+                          disabled={busy}
+                          aria-current={isActive ? "true" : undefined}
+                          className={
+                            isActive
+                              ? "hu-list-item hu-list-item--active"
+                              : "hu-list-item"
+                          }
+                          onClick={() => selectHU(hu.id)}
+                        >
+                          <div className="hu-list-item-top">
+                            <strong>{hu.external_code}</strong>
+                            <span
+                              className={statusBadgeClass(hu.status)}
+                            >
+                              {hu.status}
+                            </span>
+                          </div>
+                          <span>
+                            {hu.sku.code} · Qty {hu.quantity}
+                          </span>
+                          <small>
+                            {hu.bin?.code ?? "Unassigned"} · v
+                            {hu.version}
+                          </small>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
                 {list.page.total > list.page.items.length && (
                   <p className="muted">
-                    Showing the first {list.page.items.length}{" "}
-                    records. Narrow your search to find more.
+                    Showing the first {list.page.items.length} of{" "}
+                    {list.page.total} records. Narrow your search
+                    to find more.
                   </p>
                 )}
               </>
             )}
           </section>
 
-          <section className="panel">
+          <section
+            className="panel"
+            aria-busy={catalog.kind === "loading"}
+          >
             <div className="panel-heading">
               <h2>Register Incoming HU</h2>
             </div>
@@ -460,9 +722,16 @@ export default function HandlingUnitsPage() {
             )}
 
             {catalog.kind === "error" && (
-              <p role="alert" className="error-text">
-                {catalog.message}
-              </p>
+              <div role="alert" className="inline-error">
+                <p className="error-text">{catalog.message}</p>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={retryCatalog}
+                >
+                  Retry
+                </button>
+              </div>
             )}
 
             {catalog.kind === "ready" && (
@@ -476,11 +745,19 @@ export default function HandlingUnitsPage() {
                     required
                     value={newCode}
                     onChange={(event) =>
-                      setNewCode(event.target.value)
+                      setNewCode(event.target.value.toUpperCase())
                     }
                     placeholder="HU-0021"
                     maxLength={120}
+                    aria-invalid={codeInvalid}
+                    disabled={busy}
                   />
+                  {codeInvalid && (
+                    <small className="error-text">
+                      Min 3 characters: A–Z, 0–9, dot, dash, or
+                      underscore.
+                    </small>
+                  )}
                 </label>
 
                 <label className="field">
@@ -491,6 +768,7 @@ export default function HandlingUnitsPage() {
                     onChange={(event) =>
                       setNewSkuId(event.target.value)
                     }
+                    disabled={busy}
                   >
                     <option value="">Select SKU</option>
                     {catalog.skus.map((sku) => (
@@ -512,15 +790,18 @@ export default function HandlingUnitsPage() {
                     onChange={(event) =>
                       setNewQuantity(event.target.value)
                     }
+                    disabled={busy}
                   />
                 </label>
 
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={busy}
+                  disabled={busy || codeInvalid}
                 >
-                  {busy ? "Processing..." : "Register HU"}
+                  {activeAction === "registering"
+                    ? "Registering..."
+                    : "Register HU"}
                 </button>
               </form>
             )}
@@ -528,9 +809,22 @@ export default function HandlingUnitsPage() {
         </div>
 
         <div>
-          <section className="panel">
+          <section
+            className="panel"
+            aria-busy={detail.kind === "loading"}
+          >
             <div className="panel-heading">
               <h2>Handling Unit Details</h2>
+              {selectedId && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={refreshDetail}
+                  disabled={detail.kind === "loading" || busy}
+                >
+                  Refresh
+                </button>
+              )}
             </div>
 
             {!selectedId && (
@@ -544,9 +838,16 @@ export default function HandlingUnitsPage() {
             )}
 
             {selectedId && detail.kind === "error" && (
-              <p role="alert" className="error-text">
-                {detail.message}
-              </p>
+              <div role="alert" className="inline-error">
+                <p className="error-text">{detail.message}</p>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={refreshDetail}
+                >
+                  Retry
+                </button>
+              </div>
             )}
 
             {selected && (
@@ -554,15 +855,36 @@ export default function HandlingUnitsPage() {
                 <div className="hu-detail-grid">
                   <div>
                     <span>Label</span>
-                    <strong>{selected.external_code}</strong>
+                    <div className="hu-code-row">
+                      <strong>{selected.external_code}</strong>
+                      <button
+                        type="button"
+                        className="ghost-button ghost-button--xs"
+                        onClick={() =>
+                          void copyCode(selected.external_code)
+                        }
+                      >
+                        {copiedCode ? "Copied" : "Copy"}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <span>Status</span>
-                    <strong>{selected.status}</strong>
+                    <div>
+                      <span
+                        className={statusBadgeClass(
+                          selected.status,
+                        )}
+                      >
+                        {selected.status}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <span>Product</span>
-                    <strong>{selected.sku.name}</strong>
+                    <strong>
+                      {selected.sku.code} — {selected.sku.name}
+                    </strong>
                   </div>
                   <div>
                     <span>Quantity</span>
@@ -570,13 +892,11 @@ export default function HandlingUnitsPage() {
                   </div>
                   <div>
                     <span>Recorded Bin</span>
-                    <strong>
-                      {selected.bin?.code ?? "Unassigned"}
-                    </strong>
+                    <strong>{recordedBinLabel}</strong>
                   </div>
                   <div>
                     <span>Record Version</span>
-                    <strong>{selected.version}</strong>
+                    <strong>v{selected.version}</strong>
                   </div>
                 </div>
 
@@ -585,8 +905,32 @@ export default function HandlingUnitsPage() {
 
                   {!canMove ? (
                     <p className="muted">
-                      This status requires another workflow
-                      before movement is permitted.
+                      Handling units with status{" "}
+                      <strong>{selected.status}</strong> require
+                      another workflow before storage movement is
+                      permitted.
+                    </p>
+                  ) : catalog.kind === "loading" ? (
+                    <p role="status" className="muted">
+                      Loading accessible storage bins...
+                    </p>
+                  ) : catalog.kind === "error" ? (
+                    <div className="inline-error">
+                      <p className="error-text">
+                        Unable to load storage bins.
+                      </p>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={retryCatalog}
+                      >
+                        Retry catalog
+                      </button>
+                    </div>
+                  ) : groupedDestinations.length === 0 ? (
+                    <p className="muted">
+                      No other accessible storage bins are
+                      available for this warehouse.
                     </p>
                   ) : (
                     <>
@@ -602,33 +946,42 @@ export default function HandlingUnitsPage() {
                           <option value="">
                             Choose destination
                           </option>
-                          {destinations.map((destination) => (
-                            <option
-                              key={destination.id}
-                              value={destination.id}
-                            >
-                              {destination.label}
-                            </option>
-                          ))}
+                          {groupedDestinations.map(
+                            ([groupLabel, bins]) => (
+                              <optgroup
+                                key={groupLabel}
+                                label={groupLabel}
+                              >
+                                {bins.map((destination) => (
+                                  <option
+                                    key={destination.id}
+                                    value={destination.id}
+                                  >
+                                    {destination.binCode} (
+                                    {destination.label})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ),
+                          )}
                         </select>
                       </label>
 
                       <button
                         className="primary-button"
                         type="button"
-                        disabled={
-                          busy ||
-                          !targetBinId ||
-                          catalog.kind !== "ready"
-                        }
+                        disabled={busy || !targetBinId}
                         onClick={() => void bookMovement()}
                       >
-                        {busy ? "Processing..." : "Book Movement"}
+                        {activeAction === "moving"
+                          ? "Booking..."
+                          : "Book Movement"}
                       </button>
 
                       <p className="muted">
                         The backend validates capacity,
-                        warehouse rules and record version
+                        warehouse rules and version{" "}
+                        <strong>v{selected.version}</strong>{" "}
                         before committing.
                       </p>
                     </>
@@ -663,13 +1016,13 @@ export default function HandlingUnitsPage() {
                     <tbody>
                       {detail.events.items.map((event) => (
                         <tr key={event.id}>
-                          <td>{event.event_type}</td>
+                          <td title={event.event_type}>
+                            {formatEventType(event.event_type)}
+                          </td>
                           <td>{event.quantity}</td>
-                          <td>{event.after_version}</td>
+                          <td>v{event.after_version}</td>
                           <td>
-                            {new Date(
-                              event.created_at,
-                            ).toLocaleString()}
+                            {formatTimestamp(event.created_at)}
                           </td>
                         </tr>
                       ))}
@@ -680,7 +1033,8 @@ export default function HandlingUnitsPage() {
 
               {detail.events.total > detail.events.items.length && (
                 <p className="muted">
-                  Showing the first 100 recorded events.
+                  Showing the first {detail.events.items.length}{" "}
+                  of {detail.events.total} recorded events.
                 </p>
               )}
             </section>

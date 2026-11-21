@@ -65,8 +65,10 @@ function validHU(value: unknown): value is HandlingUnit {
     typeof value.external_code === "string" &&
     typeof value.sku_id === "string" &&
     (value.bin_id === null || typeof value.bin_id === "string") &&
+    typeof value.quantity === "number" &&
     Number.isSafeInteger(value.quantity) &&
     value.quantity >= 0 &&
+    typeof value.version === "number" &&
     Number.isSafeInteger(value.version) &&
     value.version >= 1 &&
     [
@@ -97,10 +99,16 @@ function validEvent(value: unknown): value is WarehouseEvent {
     (value.before_status === null ||
       typeof value.before_status === "string") &&
     typeof value.after_status === "string" &&
+    typeof value.quantity === "number" &&
     Number.isSafeInteger(value.quantity) &&
+    value.quantity > 0 &&
     (value.before_version === null ||
-      Number.isSafeInteger(value.before_version)) &&
+      (typeof value.before_version === "number" &&
+        Number.isSafeInteger(value.before_version) &&
+        value.before_version >= 1)) &&
+    typeof value.after_version === "number" &&
     Number.isSafeInteger(value.after_version) &&
+    value.after_version >= 1 &&
     typeof value.source_label === "string" &&
     typeof value.created_at === "string"
   );

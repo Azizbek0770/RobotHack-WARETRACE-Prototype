@@ -332,3 +332,29 @@ def test_event_pagination(ctx):
     assert response.status_code == 200
     assert response.json()["total"] == 2
     assert response.json()["items"][0]["event_type"] == "HU_MOVED"
+
+
+def test_unknown_handling_unit_paths(ctx):
+    client, _, _ = ctx
+    unknown_id = "00000000-0000-0000-0000-000000000000"
+
+    assert client.get(
+        f"/api/v1/handling-units/{unknown_id}",
+    ).status_code == 404
+
+    assert client.get(
+        f"/api/v1/handling-units/{unknown_id}/events",
+    ).status_code == 404
+
+    response = client.post(
+        f"/api/v1/handling-units/{unknown_id}/move",
+        json={
+            "target_bin_id": "00000000-0000-0000-0000-000000000001",
+            "expected_version": 1,
+        },
+    )
+    assert response.status_code == 404
+
+    assert client.get(
+        "/api/v1/handling-units/by-code/NOT-FOUND",
+    ).status_code == 404

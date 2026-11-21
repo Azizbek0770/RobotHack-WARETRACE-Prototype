@@ -192,9 +192,10 @@ describe("Handling Unit interface", () => {
       target: { value: "3" },
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Register HU" }),
-    );
+    const registerButton = screen.getByRole("button", {
+      name: "Register HU",
+    });
+    fireEvent.submit(registerButton.closest("form")!);
 
     await waitFor(() => {
       expect(createHandlingUnit).toHaveBeenCalledWith({
@@ -252,5 +253,78 @@ describe("Handling Unit interface", () => {
     expect(
       await screen.findByRole("alert"),
     ).toHaveTextContent("Stale handling unit version");
+  });
+
+  it("rejects invalid registration input before calling the API", async () => {
+    render(<HandlingUnitsPage />);
+
+    await screen.findByRole("option", {
+      name: /SKU-001/,
+    });
+
+    fireEvent.change(screen.getByLabelText("HU label"), {
+      target: { value: "bad label" },
+    });
+    fireEvent.change(screen.getByLabelText("Product SKU"), {
+      target: { value: skuId },
+    });
+    fireEvent.change(screen.getByLabelText("Quantity"), {
+      target: { value: "1" },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Register HU" }),
+    );
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent("Use a valid HU label");
+    expect(createHandlingUnit).not.toHaveBeenCalled();
+  });
+
+  it("searches by label or SKU and shows no-match state", async () => {
+    vi.mocked(listHandlingUnits).mockResolvedValue({
+      items: [],
+      page: 1,
+      page_size: 100,
+      total: 0,
+    });
+
+    render(<HandlingUnitsPage />);
+
+    fireEvent.change(
+      await screen.findByLabelText("HU label or SKU code"),
+      { target: { value: "NOT-FOUND" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Search" }),
+    );
+
+    expect(
+      await screen.findByText("No matching handling units."),
+    ).toBeInTheDocument();
+    expect(listHandlingUnits).toHaveBeenCalledWith(
+      "NOT-FOUND",
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("hides movement controls for statuses that cannot move", async () => {
+    vi.mocked(getHandlingUnit).mockResolvedValue({
+      ...sampleHU,
+      status: "QUARANTINED",
+    });
+
+    render(<HandlingUnitsPage />);
+
+    expect(
+      await screen.findByText(
+        "This status requires another workflow",
+        { exact: false },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Book Movement" }),
+    ).not.toBeInTheDocument();
   });
 });

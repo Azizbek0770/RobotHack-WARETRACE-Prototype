@@ -661,3 +661,122 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+.notice--dismissible {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.notice-dismiss {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.125rem 0.375rem;
+  opacity: 0.75;
+}
+
+.notice-dismiss:hover {
+  opacity: 1;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.ghost-button {
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.ghost-button:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.ghost-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ghost-button--xs {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+.hu-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.filter-chip {
+  background: transparent;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.filter-chip--active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgb(59, 130, 246);
+  font-weight: 600;
+}
+
+.hu-list-item-top,
+.hu-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.hu-code-row {
+  justify-content: flex-start;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.status-badge--received {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.status-badge--stored {
+  background: rgba(16, 185, 129, 0.16);
+  color: #047857;
+}
+
+.status-badge--closed {
+  background: rgba(100, 116, 139, 0.18);
+  color: #475569;
+}
+
+.inline-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
