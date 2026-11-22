@@ -206,3 +206,17 @@ export async function moveHandlingUnit(
     validHU,
   );
 }
+
+/** Read-only lookup of an existing HU by its registered external code. */
+export async function getHandlingUnitByCode(
+  code: string,
+  signal?: AbortSignal,
+): Promise<HandlingUnit> {
+  return parseItem(
+    await apiGet(
+      `/handling-units/by-code/${encodeURIComponent(code)}`,
+      signal,
+    ),
+    validHU,
+  );
+}

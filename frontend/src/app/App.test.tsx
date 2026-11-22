@@ -37,6 +37,7 @@ vi.mock("../api/warehouse", () => ({
 vi.mock("../api/handlingUnits", () => ({
   createHandlingUnit: vi.fn(),
   getHandlingUnit: vi.fn(),
+  getHandlingUnitByCode: vi.fn(),
   getHUEvents: vi.fn(),
   listHandlingUnits: vi.fn(),
   moveHandlingUnit: vi.fn(),

@@ -79,3 +79,19 @@ export async function apiPost(
 
   return readResponse(response);
 }
+
+/** Upload multipart content without setting Content-Type; browser sets boundary. */
+export async function apiUpload(
+  path: `/${string}`,
+  form: FormData,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    signal,
+    headers: { Accept: "application/json" },
+    body: form,
+  });
+
+  return readResponse(response);
+}

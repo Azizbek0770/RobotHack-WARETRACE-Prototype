@@ -8,8 +8,9 @@ import {
 import DashboardPage from "../features/dashboard/DashboardPage";
 import HandlingUnitsPage from "../features/handling-units/HandlingUnitsPage";
 import InventoryPage from "../features/inventory/InventoryPage";
+import IntakePage from "../features/intake/IntakePage";
 
-type View = "dashboard" | "inventory" | "handling-units";
+type View = "dashboard" | "inventory" | "handling-units" | "intake";
 
 type Connection =
   | { status: "loading" }
@@ -20,6 +21,7 @@ const navigation: { id: View; label: string }[] = [
   { id: "dashboard", label: "Overview" },
   { id: "inventory", label: "Inventory & Locations" },
   { id: "handling-units", label: "Handling Units" },
+  { id: "intake", label: "Scan & Identify" },
 ];
 
 export default function App() {
@@ -120,6 +122,7 @@ export default function App() {
         {view === "dashboard" && <DashboardPage />}
         {view === "inventory" && <InventoryPage />}
         {view === "handling-units" && <HandlingUnitsPage />}
+        {view === "intake" && <IntakePage />}
       </main>
 
       <footer className="footer">
