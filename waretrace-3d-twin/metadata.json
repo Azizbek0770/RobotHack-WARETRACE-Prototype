@@ -1,0 +1,6 @@
+{
+  "name": "WARETRACE — Interactive Warehouse Digital Twin Module",
+  "description": "Standalone interactive 3D warehouse digital twin visualization module for WARETRACE with REST API integration, optional WebSocket synchronization, and deterministic demo data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
