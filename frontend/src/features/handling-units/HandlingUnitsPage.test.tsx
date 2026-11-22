@@ -159,7 +159,11 @@ describe("Handling Unit interface", () => {
     expect(huButton).toBeInTheDocument();
 
     expect(
-      await screen.findByText("Calibration Kit"),
+      await screen.findAllByText(/Calibration Kit/),
+    ).not.toHaveLength(0);
+
+    expect(
+      await screen.findByText("Recorded Bin"),
     ).toBeInTheDocument();
 
     expect(getHandlingUnit).toHaveBeenCalledWith(
@@ -272,13 +276,14 @@ describe("Handling Unit interface", () => {
       target: { value: "1" },
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Register HU" }),
-    );
-
     expect(
-      await screen.findByRole("alert"),
-    ).toHaveTextContent("Use a valid HU label");
+      screen.getByText(
+        "Min 3 characters: A–Z, 0–9, dot, dash, or underscore.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Register HU" }),
+    ).toBeDisabled();
     expect(createHandlingUnit).not.toHaveBeenCalled();
   });
 
@@ -317,12 +322,18 @@ describe("Handling Unit interface", () => {
 
     render(<HandlingUnitsPage />);
 
-    expect(
-      await screen.findByText(
-        "This status requires another workflow",
-        { exact: false },
-      ),
-    ).toBeInTheDocument();
+    const matchingMessages = await screen.findAllByText(
+      (_, element) =>
+        element?.tagName === "P" &&
+        (
+          element.textContent
+            ?.replace(/\s+/g, " ")
+            .includes(
+              "Handling units with status QUARANTINED require another workflow",
+            ) ?? false
+        ),
+    );
+    expect(matchingMessages.length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", { name: "Book Movement" }),
     ).not.toBeInTheDocument();

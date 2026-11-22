@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -240,10 +239,7 @@ export default function HandlingUnitsPage() {
 
   // Load selected HU and its event history.
   useEffect(() => {
-    if (!selectedId) {
-      setDetail({ kind: "idle" });
-      return;
-    }
+    if (!selectedId) return;
 
     const huId = selectedId;
     const controller = new AbortController();
@@ -428,18 +424,15 @@ export default function HandlingUnitsPage() {
     selected?.status === "RECEIVED" ||
     selected?.status === "STORED";
 
-  const destinationById = useMemo(() => {
-    if (catalog.kind !== "ready") {
-      return new Map<string, Destination>();
-    }
-    return new Map(
-      catalog.destinations.map((item) => [item.id, item]),
-    );
-  }, [catalog]);
+  const destinationById =
+    catalog.kind === "ready"
+      ? new Map(
+          catalog.destinations.map((item) => [item.id, item]),
+        )
+      : new Map<string, Destination>();
 
-  const groupedDestinations = useMemo(() => {
-    if (catalog.kind !== "ready") return [];
-
+  let groupedDestinations: [string, Destination[]][] = [];
+  if (catalog.kind === "ready") {
     const currentBin = selected?.bin_id
       ? destinationById.get(selected.bin_id)
       : undefined;
@@ -457,24 +450,24 @@ export default function HandlingUnitsPage() {
       groups.set(dest.groupLabel, bucket);
     }
 
-    return Array.from(groups.entries());
-  }, [catalog, destinationById, selected?.bin_id]);
+    groupedDestinations = Array.from(groups.entries());
+  }
 
-  const availableStatuses = useMemo(() => {
-    if (list.kind !== "ready") return [];
-    const unique = new Set(
-      list.page.items.map((item) => item.status),
-    );
-    return Array.from(unique).sort();
-  }, [list]);
+  const availableStatuses =
+    list.kind === "ready"
+      ? Array.from(
+          new Set(list.page.items.map((item) => item.status)),
+        ).sort()
+      : [];
 
-  const visibleItems = useMemo(() => {
-    if (list.kind !== "ready") return [];
-    if (statusFilter === "ALL") return list.page.items;
-    return list.page.items.filter(
-      (item) => item.status === statusFilter,
-    );
-  }, [list, statusFilter]);
+  const visibleItems =
+    list.kind === "ready"
+      ? statusFilter === "ALL"
+        ? list.page.items
+        : list.page.items.filter(
+            (item) => item.status === statusFilter,
+          )
+      : [];
 
   const recordedBinLabel = selected?.bin_id
     ? (destinationById.get(selected.bin_id)?.label ??
