@@ -25,6 +25,7 @@ from app.schemas.handling_unit import (
     HandlingUnitMove,
     HandlingUnitRead,
 )
+from app.services.inspection import has_passed_inspection
 
 SOURCE = "WARETRACE_DEMO_API"
 
@@ -123,10 +124,20 @@ def move_hu(
             if hu.status not in (
                 HandlingUnitStatus.RECEIVED,
                 HandlingUnitStatus.STORED,
+                HandlingUnitStatus.INSPECTION_REQUIRED,
             ):
                 raise HTTPException(
                     status_code=409,
                     detail="Handling unit status cannot be moved in this stage",
+                )
+
+            if hu.status in (
+                HandlingUnitStatus.RECEIVED,
+                HandlingUnitStatus.INSPECTION_REQUIRED,
+            ) and not has_passed_inspection(db, hu_id):
+                raise HTTPException(
+                    status_code=409,
+                    detail="A passing inspection is required before storage",
                 )
 
             if (

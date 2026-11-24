@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 class WarehouseEventType(str, Enum):
     HU_CREATED = "HU_CREATED"
     HU_MOVED = "HU_MOVED"
+    HU_INSPECTION_PASSED = "HU_INSPECTION_PASSED"
+    HU_INSPECTION_FAILED = "HU_INSPECTION_FAILED"
 
 
 class WarehouseEvent(IdentityTimestampMixin, Base):

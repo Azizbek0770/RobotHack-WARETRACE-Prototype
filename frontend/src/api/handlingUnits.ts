@@ -24,7 +24,11 @@ export interface HandlingUnit {
 export interface WarehouseEvent {
   id: string;
   hu_id: string;
-  event_type: "HU_CREATED" | "HU_MOVED";
+  event_type:
+    | "HU_CREATED"
+    | "HU_MOVED"
+    | "HU_INSPECTION_PASSED"
+    | "HU_INSPECTION_FAILED";
   from_bin_id: string | null;
   to_bin_id: string | null;
   before_status: string | null;
@@ -91,7 +95,12 @@ function validEvent(value: unknown): value is WarehouseEvent {
   return (
     typeof value.id === "string" &&
     typeof value.hu_id === "string" &&
-    ["HU_CREATED", "HU_MOVED"].includes(String(value.event_type)) &&
+    [
+      "HU_CREATED",
+      "HU_MOVED",
+      "HU_INSPECTION_PASSED",
+      "HU_INSPECTION_FAILED",
+    ].includes(String(value.event_type)) &&
     (value.from_bin_id === null ||
       typeof value.from_bin_id === "string") &&
     (value.to_bin_id === null ||

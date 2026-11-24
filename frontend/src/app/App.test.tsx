@@ -22,6 +22,24 @@ import {
 } from "../api/warehouse";
 import App from "./App";
 
+vi.mock("../features/warehouse-3d/Warehouse3DPage", () => ({
+  default: () => (
+    <section>
+      <h1>3D Warehouse</h1>
+      <span>LIVE API · READ ONLY</span>
+    </section>
+  ),
+}));
+
+vi.mock("../features/inspection/InspectionPage", () => ({
+  default: () => (
+    <section>
+      <h1>Inspections</h1>
+      <span>Operator decision required</span>
+    </section>
+  ),
+}));
+
 vi.mock("../api/health", () => ({
   fetchBackendHealth: vi.fn(),
 }));
@@ -235,6 +253,42 @@ describe("WARETRACE operational frontend", () => {
     expect(
       await screen.findByRole("heading", {
         name: "Handling Units",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates to the read-only live 3D warehouse", async () => {
+    render(<App />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "3D Warehouse",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "3D Warehouse",
+      }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText("LIVE API · READ ONLY"),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates to the inspection workflow", async () => {
+    render(<App />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Inspections",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Inspections",
       }),
     ).toBeInTheDocument();
   });
