@@ -125,6 +125,21 @@ def create(client, ids, code="HU-001", qty=5):
 
 
 def move(client, hu_id, target, version=1):
+    detail = client.get(f"/api/v1/handling-units/{hu_id}")
+    if detail.status_code == 200 and detail.json()["status"] == "RECEIVED":
+        inspection = client.post(
+            f"/api/v1/handling-units/{hu_id}/inspection",
+            json={
+                "result": "PASS",
+                "checklist_answers": {"damage": False, "seal": True},
+                "operator_actor": "TEST_OPERATOR",
+            },
+        )
+        assert inspection.status_code == 200
+        version = 2
+    elif detail.status_code == 200 and detail.json()["status"] == "INSPECTION_REQUIRED":
+        version = 2
+
     return client.post(
         f"/api/v1/handling-units/{hu_id}/move",
         json={
@@ -167,7 +182,7 @@ def test_move_updates_ledger_and_event(ctx):
 
     updated = response.json()
     assert updated["status"] == "STORED"
-    assert updated["version"] == 2
+    assert updated["version"] == 3
 
     with Session(engine) as db:
         rows = db.scalars(select(ExpectedInventory)).all()
@@ -176,7 +191,7 @@ def test_move_updates_ledger_and_event(ctx):
         assert rows[0].expected_qty == 5
         assert str(rows[0].bin_id) == ids["a"]
 
-    response = move(client, hu_id, ids["b"], version=2)
+    response = move(client, hu_id, ids["b"], version=3)
     assert response.status_code == 200
 
     with Session(engine) as db:
@@ -192,8 +207,7 @@ def test_move_updates_ledger_and_event(ctx):
         assert actual == expected
 
     history = client.get(f"/api/v1/handling-units/{hu_id}/events").json()
-
-    assert history["total"] == 3
+    assert history["total"] == 4
 
 
 def test_stale_version_preserves_data(ctx):
@@ -243,7 +257,7 @@ def test_rejects_bad_target_and_capacity(ctx):
 
     history = client.get(f"/api/v1/handling-units/{hu_id}/events").json()
 
-    assert history["total"] == 1
+    assert history["total"] == 2
 
 
 def test_duplicate_and_unknown_sku(ctx):
@@ -288,10 +302,10 @@ def test_same_bin_rejected(ctx):
 
     assert move(client, hu_id, ids["a"]).status_code == 200
 
-    assert move(client, hu_id, ids["a"], version=2).status_code == 409
+    assert move(client, hu_id, ids["a"], version=3).status_code == 409
 
     history = client.get(f"/api/v1/handling-units/{hu_id}/events").json()
-    assert history["total"] == 2
+    assert history["total"] == 3
 
 
 def test_ledger_mismatch_rolls_back(ctx):
@@ -308,15 +322,15 @@ def test_ledger_mismatch_rolls_back(ctx):
         assert row is not None
         row.expected_qty = 0
 
-    response = move(client, hu_id, ids["b"], version=2)
+    response = move(client, hu_id, ids["b"], version=3)
     assert response.status_code == 409
 
     detail = client.get(f"/api/v1/handling-units/{hu_id}").json()
     assert detail["bin_id"] == ids["a"]
-    assert detail["version"] == 2
+    assert detail["version"] == 3
 
     history = client.get(f"/api/v1/handling-units/{hu_id}/events").json()
-    assert history["total"] == 2
+    assert history["total"] == 3
 
 
 def test_event_pagination(ctx):
@@ -330,8 +344,11 @@ def test_event_pagination(ctx):
     )
 
     assert response.status_code == 200
-    assert response.json()["total"] == 2
-    assert response.json()["items"][0]["event_type"] == "HU_MOVED"
+    assert response.json()["total"] == 3
+    assert response.json()["items"][0]["event_type"] in (
+        "HU_INSPECTION_PASSED",
+        "HU_MOVED",
+    )
 
 
 def test_unknown_handling_unit_paths(ctx):
@@ -367,3 +384,112 @@ def test_unknown_handling_unit_paths(ctx):
         ).status_code
         == 404
     )
+
+
+def test_received_hu_cannot_move_without_passing_inspection(ctx):
+    client, _, ids = ctx
+    hu_id = create(client, ids).json()["id"]
+
+    response = client.post(
+        f"/api/v1/handling-units/{hu_id}/move",
+        json={
+            "target_bin_id": ids["a"],
+            "expected_version": 1,
+        },
+    )
+    assert response.status_code == 409
+    assert "passing inspection" in response.json()["error"]["message"]
+
+    detail = client.get(f"/api/v1/handling-units/{hu_id}").json()
+    assert detail["status"] == "RECEIVED"
+    assert detail["bin_id"] is None
+
+
+def test_passing_inspection_allows_storage_and_is_audited(ctx):
+    client, _, ids = ctx
+    hu_id = create(client, ids).json()["id"]
+
+    inspection = client.post(
+        f"/api/v1/handling-units/{hu_id}/inspection",
+        json={
+            "result": "PASS",
+            "checklist_answers": {"seal": True, "package": True},
+            "damage_notes": "",
+            "evidence_checksum": "A" * 64,
+            "operator_actor": "TEST_OPERATOR",
+        },
+    )
+    assert inspection.status_code == 200
+    assert inspection.json()["result"] == "PASS"
+
+    detail = client.get(f"/api/v1/handling-units/{hu_id}").json()
+    assert detail["status"] == "INSPECTION_REQUIRED"
+    assert detail["version"] == 2
+
+    move_response = client.post(
+        f"/api/v1/handling-units/{hu_id}/move",
+        json={
+            "target_bin_id": ids["a"],
+            "expected_version": 2,
+        },
+    )
+    assert move_response.status_code == 200
+    assert move_response.json()["status"] == "STORED"
+
+    history = client.get(f"/api/v1/handling-units/{hu_id}/events").json()
+    assert history["total"] == 3
+    assert [item["event_type"] for item in history["items"]].count(
+        "HU_INSPECTION_PASSED"
+    ) == 1
+
+
+def test_failed_inspection_quarantines_and_blocks_storage(ctx):
+    client, _, ids = ctx
+    hu_id = create(client, ids).json()["id"]
+
+    inspection = client.post(
+        f"/api/v1/handling-units/{hu_id}/inspection",
+        json={
+            "result": "FAIL",
+            "checklist_answers": {"seal": False, "package": False},
+            "damage_notes": "Packaging seam is damaged",
+            "operator_actor": "TEST_OPERATOR",
+        },
+    )
+    assert inspection.status_code == 200
+    assert inspection.json()["result"] == "FAIL"
+
+    detail = client.get(f"/api/v1/handling-units/{hu_id}").json()
+    assert detail["status"] == "QUARANTINED"
+
+    move_response = client.post(
+        f"/api/v1/handling-units/{hu_id}/move",
+        json={
+            "target_bin_id": ids["q"],
+            "expected_version": 2,
+        },
+    )
+    assert move_response.status_code == 409
+
+    history = client.get(f"/api/v1/handling-units/{hu_id}/events").json()
+    assert history["total"] == 2
+    assert [item["event_type"] for item in history["items"]].count(
+        "HU_INSPECTION_FAILED"
+    ) == 1
+
+
+def test_duplicate_final_inspection_is_rejected(ctx):
+    client, _, ids = ctx
+    hu_id = create(client, ids).json()["id"]
+
+    first = client.post(
+        f"/api/v1/handling-units/{hu_id}/inspection",
+        json={"result": "PASS", "operator_actor": "TEST_OPERATOR"},
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        f"/api/v1/handling-units/{hu_id}/inspection",
+        json={"result": "FAIL", "operator_actor": "TEST_OPERATOR"},
+    )
+    assert second.status_code == 409

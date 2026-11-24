@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import {
   fetchBackendHealth,
@@ -9,8 +9,18 @@ import DashboardPage from "../features/dashboard/DashboardPage";
 import HandlingUnitsPage from "../features/handling-units/HandlingUnitsPage";
 import InventoryPage from "../features/inventory/InventoryPage";
 import IntakePage from "../features/intake/IntakePage";
+import InspectionPage from "../features/inspection/InspectionPage";
+const Warehouse3DPage = lazy(
+  () => import("../features/warehouse-3d/Warehouse3DPage"),
+);
 
-type View = "dashboard" | "inventory" | "handling-units" | "intake";
+type View =
+  | "dashboard"
+  | "inventory"
+  | "handling-units"
+  | "intake"
+  | "inspection"
+  | "warehouse-3d";
 
 type Connection =
   | { status: "loading" }
@@ -22,6 +32,8 @@ const navigation: { id: View; label: string }[] = [
   { id: "inventory", label: "Inventory & Locations" },
   { id: "handling-units", label: "Handling Units" },
   { id: "intake", label: "Scan & Identify" },
+  { id: "inspection", label: "Inspections" },
+  { id: "warehouse-3d", label: "3D Warehouse" },
 ];
 
 export default function App() {
@@ -123,6 +135,18 @@ export default function App() {
         {view === "inventory" && <InventoryPage />}
         {view === "handling-units" && <HandlingUnitsPage />}
         {view === "intake" && <IntakePage />}
+        {view === "inspection" && <InspectionPage />}
+        {view === "warehouse-3d" && (
+          <Suspense
+            fallback={
+              <div className="notice" role="status">
+                Loading 3D warehouse…
+              </div>
+            }
+          >
+            <Warehouse3DPage />
+          </Suspense>
+        )}
       </main>
 
       <footer className="footer">

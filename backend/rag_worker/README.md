@@ -31,6 +31,8 @@ $env:WARETRACE_RAG_ROOT = "$HOME\.copilot\session-state\cf0e11b6-41eb-49bd-9916-
 & $ragPython -m backend.rag_worker.verify_embedding
 ```
 
-The OpenRouter callback is intentionally not implemented here. The real text
-provider test and document ingestion remain gated on a configured API key and a
-verified available model.
+The OpenRouter text callback is implemented with bounded concurrency,
+timeouts, bounded 429 retry backoff, and explicit 401/402/404 handling. It reads
+`OPENROUTER_API_KEY` from the environment and accepts `OPENROUTER_TEXT_MODEL`
+with a configurable default. The real text-provider test and document ingestion
+remain gated on a configured key and a current provider-verifiable model.

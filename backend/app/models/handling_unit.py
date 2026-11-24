@@ -18,6 +18,7 @@ from app.db.base import Base, IdentityTimestampMixin
 
 if TYPE_CHECKING:
     from app.models.event import WarehouseEvent
+    from app.models.inspection import HandlingUnitInspection
     from app.models.inventory import SKU
     from app.models.warehouse import StorageBin
 
@@ -97,4 +98,10 @@ class HandlingUnit(IdentityTimestampMixin, Base):
     events: Mapped[list["WarehouseEvent"]] = relationship(
         back_populates="handling_unit",
         passive_deletes=True,
+    )
+
+    inspections: Mapped[list["HandlingUnitInspection"]] = relationship(
+        back_populates="handling_unit",
+        passive_deletes=True,
+        order_by="HandlingUnitInspection.created_at",
     )
