@@ -859,6 +859,503 @@ button:focus-visible {
   }
 }
 
+/* CH07-03 — Inventory audit workflow */
+.audit-page {
+  display: grid;
+  gap: 18px;
+}
+
+.audit-page .page-heading {
+  margin-bottom: 4px;
+}
+
+.audit-read-only-tag,
+.audit-state-badge,
+.classification-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid #53677f;
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #d7e5f5;
+  background: #17273a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.audit-read-only-tag {
+  color: #b9eadb;
+  border-color: #347b69;
+  background: #102922;
+}
+
+.classification-simulated {
+  color: #ffda92;
+  border-color: #9c7131;
+  background: #352812;
+}
+
+.classification-operational {
+  color: #bcebd7;
+  border-color: #347b69;
+  background: #102922;
+}
+
+.audit-session-controls,
+.audit-session-summary,
+.audit-session-badges,
+.audit-start-form,
+.audit-compare-row {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+}
+
+.audit-session-controls > .field {
+  flex: 1;
+  min-width: 180px;
+}
+
+.audit-new-session,
+.audit-upload-button {
+  margin-top: 0;
+  min-height: 42px;
+}
+
+.audit-start-form {
+  align-items: end;
+  border-top: 1px solid #2a3b52;
+  margin-top: 22px;
+  padding-top: 20px;
+}
+
+.audit-start-form > div:first-child {
+  flex: 1.3;
+  min-width: 220px;
+}
+
+.audit-start-form h2,
+.audit-session-summary h2 {
+  margin: 0 0 7px;
+  font-size: 18px;
+}
+
+.audit-start-form .field {
+  flex: 1;
+  min-width: 170px;
+}
+
+.audit-start-form .primary-button {
+  white-space: nowrap;
+}
+
+.audit-session-summary {
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #2a3b52;
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.audit-session-summary p {
+  margin: 0;
+  color: #9fb1c8;
+  font-size: 13px;
+}
+
+.audit-session-badges {
+  align-items: center;
+}
+
+.audit-notice,
+.simulated-banner {
+  border: 1px solid #36705f;
+  border-radius: 10px;
+  padding: 12px 15px;
+  color: #bcebd7;
+  background: #102922;
+  font-size: 13px;
+}
+
+.simulated-banner {
+  border-color: #9c7131;
+  color: #ffda92;
+  background: #352812;
+  font-weight: 700;
+}
+
+.audit-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.audit-metric {
+  min-width: 0;
+  border: 1px solid #293c54;
+  border-radius: 12px;
+  padding: 15px;
+  background: #131f30;
+}
+
+.audit-metric span,
+.audit-metric small {
+  display: block;
+  color: #9fb2ca;
+  font-size: 11px;
+}
+
+.audit-metric strong {
+  display: block;
+  margin: 7px 0 5px;
+  color: #f0f6ff;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-metric small {
+  font-size: 10px;
+}
+
+.audit-metrics-note {
+  margin: -10px 0 0;
+  color: #91a5bd;
+  font-size: 12px;
+}
+
+.audit-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.audit-entry-panel {
+  margin: 0;
+}
+
+.audit-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.audit-entry-panel .primary-button,
+.audit-entry-panel .secondary-button {
+  margin-top: 16px;
+}
+
+.audit-entry-panel .field input[type="file"] {
+  padding: 9px;
+}
+
+.audit-snapshot-value {
+  margin: 14px 0 0;
+  color: #aec1d7;
+  font-size: 13px;
+}
+
+.audit-snapshot-value strong {
+  color: #fff;
+  font-size: 16px;
+}
+
+.audit-snapshot-value span,
+.audit-hint {
+  color: #91a5bd;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.audit-hint {
+  margin: 10px 0 0;
+}
+
+.audit-compare-row {
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #2a3b52;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.audit-compare-row .muted {
+  margin: 0;
+}
+
+.audit-compare-row .primary-button {
+  flex: 0 0 auto;
+}
+
+.audit-data-table td {
+  vertical-align: middle;
+}
+
+.audit-findings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.audit-findings-heading {
+  align-items: end;
+}
+
+.audit-findings-heading .muted {
+  max-width: 570px;
+  margin: 8px 0 0;
+  font-size: 11px;
+}
+
+.audit-filter {
+  width: min(230px, 100%);
+  flex: 0 0 auto;
+}
+
+.audit-finding-list {
+  display: grid;
+  gap: 9px;
+  max-height: 580px;
+  overflow: auto;
+}
+
+.audit-finding-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 7px 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #30435c;
+  border-radius: 10px;
+  color: #e9eef7;
+  background: #101c2e;
+  text-align: left;
+  cursor: pointer;
+}
+
+.audit-finding-card:hover,
+.audit-finding-card--selected {
+  border-color: #638cc0;
+  background: #1a2c43;
+}
+
+.audit-finding-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.audit-finding-location,
+.audit-finding-delta {
+  grid-column: 2;
+  color: #a7bad1;
+  font-size: 11px;
+}
+
+.audit-finding-delta {
+  grid-column: 3;
+  color: #f6f0e2;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.audit-severity {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.audit-severity--high {
+  color: #ffc1b8;
+  background: #54231f;
+}
+
+.audit-severity--medium {
+  color: #ffdc9b;
+  background: #4a361a;
+}
+
+.audit-severity--low {
+  color: #b7e7d6;
+  background: #173a30;
+}
+
+.audit-finding-state {
+  grid-column: 3;
+  justify-self: end;
+  color: #f4c778;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.audit-finding-state--resolved {
+  color: #92dec4;
+}
+
+.audit-finding-state--reviewed {
+  color: #a9c8fb;
+}
+
+.audit-detail {
+  position: sticky;
+  top: 16px;
+}
+
+.audit-evidence-list {
+  display: grid;
+  gap: 0;
+  margin: 16px 0;
+}
+
+.audit-evidence-list > div {
+  display: grid;
+  grid-template-columns: minmax(115px, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #293b52;
+  font-size: 12px;
+}
+
+.audit-evidence-list dt {
+  color: #94a8bf;
+}
+
+.audit-evidence-list dd {
+  margin: 0;
+  color: #e2ebf7;
+  overflow-wrap: anywhere;
+}
+
+.audit-uuid {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+}
+
+.audit-evidence-delta {
+  font-weight: 800;
+}
+
+.audit-action-history {
+  border-top: 1px solid #2a3b52;
+  padding-top: 14px;
+}
+
+.audit-action-history h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.audit-action-history p {
+  margin: 6px 0;
+  color: #a8bbd1;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.audit-review-form {
+  display: grid;
+  gap: 13px;
+  border-top: 1px solid #2a3b52;
+  margin-top: 15px;
+  padding-top: 15px;
+}
+
+.audit-review-form .primary-button {
+  width: 100%;
+}
+
+.audit-3d-viewport {
+  height: 480px;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid #30435c;
+  border-radius: 11px;
+  background: #091321;
+}
+
+.audit-3d-canvas {
+  height: 100%;
+}
+
+.audit-3d-panel .panel-heading .muted {
+  margin: 7px 0 0;
+  font-size: 11px;
+}
+
+@media (max-width: 1050px) {
+  .audit-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .audit-findings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-detail {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .audit-start-form,
+  .audit-session-controls,
+  .audit-session-summary,
+  .audit-compare-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .audit-entry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-session-controls > .field,
+  .audit-start-form .field,
+  .audit-start-form > div:first-child {
+    width: 100%;
+  }
+
+  .audit-new-session {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 540px) {
+  .audit-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .audit-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-finding-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .audit-finding-state,
+  .audit-finding-delta {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .audit-evidence-list > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .audit-3d-viewport {
+    height: 360px;
+  }
+}
+
 /* S03-A1 — Read-only warehouse 3D twin */
 .warehouse-twin-page {
   width: 100%;

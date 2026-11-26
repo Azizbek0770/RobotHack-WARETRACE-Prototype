@@ -13,6 +13,7 @@ import {
 interface WarehouseZoneProps {
   zone: NormalizedZone;
   selectedBinId: string | null;
+  auditAffectedBinIds: ReadonlySet<string>;
   hoveredBinId: string | null;
   unassignedHandlingUnits: HandlingUnitNote[];
   onSelectBin: (bin: NormalizedBin) => void;
@@ -31,6 +32,7 @@ interface WarehouseZoneProps {
 export function WarehouseZone({
   zone,
   selectedBinId,
+  auditAffectedBinIds,
   hoveredBinId,
   unassignedHandlingUnits,
   onSelectBin,
@@ -238,6 +240,7 @@ export function WarehouseZone({
           bin={bin}
           rotationY={zone.transform.rotationY}
           isSelected={bin.id === selectedBinId}
+          isAuditAffected={auditAffectedBinIds.has(bin.id)}
           isHovered={bin.id === hoveredBinId}
           onSelect={onSelectBin}
           onHover={onHoverBin}

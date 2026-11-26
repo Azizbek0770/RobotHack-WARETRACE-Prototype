@@ -44,7 +44,7 @@ describe("warehouse dashboard status", () => {
     });
   });
 
-  it("shows active warehouse work and marks later modules as planned", async () => {
+  it("shows active warehouse work and labels unfinished modules", async () => {
     render(<App />);
 
     expect(
@@ -56,7 +56,13 @@ describe("warehouse dashboard status", () => {
     expect(
       screen.getByRole("heading", { name: "Warehouse Operations" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("In development")).toBeInTheDocument();
-    expect(screen.getAllByText("Planned")).toHaveLength(5);
+    expect(
+      screen
+        .getByRole("heading", { name: "Inventory Discrepancy Review" })
+        .closest(".module-card"),
+    ).toHaveTextContent("Available");
+    expect(screen.getAllByText("Available")).toHaveLength(4);
+    expect(screen.getAllByText("Placeholder")).toHaveLength(3);
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
   });
 });

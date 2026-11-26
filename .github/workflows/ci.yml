@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "focus/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      WARETRACE_ENVIRONMENT: test
+      WARETRACE_DATABASE_URL: sqlite+pysqlite:///tmp/waretrace-ci.sqlite3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend
+        run: python -m pip install --upgrade pip && python -m pip install -e "backend[dev]"
+
+      - name: Upgrade disposable database
+        run: python -m alembic -c backend/alembic.ini upgrade head
+
+      - name: Check migrations
+        run: python -m alembic -c backend/alembic.ini check
+
+      - name: Ruff
+        run: python -m ruff check backend/app backend/tests backend/alembic
+
+      - name: Black
+        run: python -m black --check backend/app backend/tests backend/alembic
+
+      - name: Pytest
+        run: python -m pytest backend/tests -q
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend
+        run: npm ci
+        working-directory: frontend
+
+      - name: Frontend tests
+        run: npm test
+        working-directory: frontend
+
+      - name: Frontend lint
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Frontend build
+        run: npm run build
+        working-directory: frontend
+
+  warehouse-3d:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: waretrace-3d-twin/package-lock.json
+
+      - name: Install standalone 3D app
+        run: npm ci
+        working-directory: waretrace-3d-twin
+
+      - name: Standalone tests
+        run: npm run test
+        working-directory: waretrace-3d-twin
+
+      - name: Standalone lint
+        run: npm run lint
+        working-directory: waretrace-3d-twin
+
+      - name: Standalone build
+        run: npm run build
+        working-directory: waretrace-3d-twin

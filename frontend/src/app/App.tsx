@@ -10,6 +10,7 @@ import HandlingUnitsPage from "../features/handling-units/HandlingUnitsPage";
 import InventoryPage from "../features/inventory/InventoryPage";
 import IntakePage from "../features/intake/IntakePage";
 import InspectionPage from "../features/inspection/InspectionPage";
+const AuditPage = lazy(() => import("../features/audit/AuditPage"));
 const Warehouse3DPage = lazy(
   () => import("../features/warehouse-3d/Warehouse3DPage"),
 );
@@ -20,6 +21,7 @@ type View =
   | "handling-units"
   | "intake"
   | "inspection"
+  | "audit"
   | "warehouse-3d";
 
 type Connection =
@@ -33,6 +35,7 @@ const navigation: { id: View; label: string }[] = [
   { id: "handling-units", label: "Handling Units" },
   { id: "intake", label: "Scan & Identify" },
   { id: "inspection", label: "Inspections" },
+  { id: "audit", label: "Inventory Audit" },
   { id: "warehouse-3d", label: "3D Warehouse" },
 ];
 
@@ -136,6 +139,17 @@ export default function App() {
         {view === "handling-units" && <HandlingUnitsPage />}
         {view === "intake" && <IntakePage />}
         {view === "inspection" && <InspectionPage />}
+        {view === "audit" && (
+          <Suspense
+            fallback={
+              <div className="notice" role="status">
+                Loading inventory audit…
+              </div>
+            }
+          >
+            <AuditPage />
+          </Suspense>
+        )}
         {view === "warehouse-3d" && (
           <Suspense
             fallback={

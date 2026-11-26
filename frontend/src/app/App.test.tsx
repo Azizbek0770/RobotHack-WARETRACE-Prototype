@@ -40,6 +40,15 @@ vi.mock("../features/inspection/InspectionPage", () => ({
   ),
 }));
 
+vi.mock("../features/audit/AuditPage", () => ({
+  default: () => (
+    <section>
+      <h1>Inventory Audit</h1>
+      <span>NO STOCK AUTO-ADJUSTMENT</span>
+    </section>
+  ),
+}));
+
 vi.mock("../api/health", () => ({
   fetchBackendHealth: vi.fn(),
 }));
@@ -290,6 +299,26 @@ describe("WARETRACE operational frontend", () => {
       await screen.findByRole("heading", {
         name: "Inspections",
       }),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates to the inventory audit workflow", async () => {
+    render(<App />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Inventory Audit",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Inventory Audit",
+      }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText("NO STOCK AUTO-ADJUSTMENT"),
     ).toBeInTheDocument();
   });
 

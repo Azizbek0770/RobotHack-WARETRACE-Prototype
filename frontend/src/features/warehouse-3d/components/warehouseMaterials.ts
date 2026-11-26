@@ -19,6 +19,7 @@ export const WARETRACE_COLORS = {
   storage: '#5EA88A',
   quarantine: '#FFB547',
   selected: '#407BFF',
+  auditAffected: '#FFB547',
   hover: '#35D6F2',
   inaccessible: '#EF4444',
   aisleLine: '#CBD5E1',

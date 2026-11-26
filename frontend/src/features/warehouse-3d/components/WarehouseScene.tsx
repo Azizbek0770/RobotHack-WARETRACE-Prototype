@@ -17,6 +17,7 @@ import { WARETRACE_COLORS, isSoftwareWebGL } from './warehouseMaterials';
 interface WarehouseSceneProps {
   snapshot: WarehouseSnapshot | null;
   selectedBinId: string | null;
+  auditAffectedBinIds: ReadonlySet<string>;
   hoveredBinId: string | null;
   visibleZoneKinds: Record<ZoneKind, boolean>;
   cameraDirective: CameraDirective | null;
@@ -62,6 +63,7 @@ function StudioEnvironment() {
 export function WarehouseScene({
   snapshot,
   selectedBinId,
+  auditAffectedBinIds,
   hoveredBinId,
   visibleZoneKinds,
   cameraDirective,
@@ -122,6 +124,7 @@ export function WarehouseScene({
           key={zone.id}
           zone={zone}
           selectedBinId={selectedBinId}
+          auditAffectedBinIds={auditAffectedBinIds}
           hoveredBinId={hoveredBinId}
           unassignedHandlingUnits={
             zone.kind === 'RECEIVING' ? unassignedHandlingUnits : []

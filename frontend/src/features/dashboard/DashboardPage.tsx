@@ -20,12 +20,14 @@ type DashboardState =
   | { status: "ready"; metrics: Metrics };
 
 const modules = [
-  ["S01", "Warehouse Operations", "In development"],
-  ["S02", "Receiving & Quality Inspection", "Planned"],
-  ["S03", "Repackaging Optimization", "Planned"],
-  ["S04", "Robot & Digital Twin", "Planned"],
-  ["S05–06", "Knowledge Engine", "Planned"],
-  ["S07", "Warehouse Assistant", "Planned"],
+  ["CH07-MVP", "Inventory Discrepancy Review", "Available"],
+  ["S01", "Warehouse Operations", "Available"],
+  ["S02", "Receiving & Quality Inspection", "Available"],
+  ["S03", "3D Warehouse Visualization", "Available"],
+  ["S04", "Repackaging Optimization", "Placeholder"],
+  ["S05", "Robot Automation", "Placeholder"],
+  ["S06", "Knowledge / RAG", "Not verified"],
+  ["S07", "Warehouse Assistant", "Placeholder"],
 ] as const;
 
 export default function DashboardPage() {

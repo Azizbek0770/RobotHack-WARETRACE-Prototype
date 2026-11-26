@@ -13,16 +13,27 @@ is already production-ready.
 
 ## Project status
 
-**This is an early-stage prototype.** The current web app is a foundation
-dashboard that checks whether the API is reachable and shows the planned
-platform modules. The active API provides health, warehouse catalog, and
-handling-unit endpoints. Other workflows appear in the source tree as
-development work, but are not all connected to the running application yet.
+### Challenge 07 MVP focus
 
-The dashboard currently labels the project **S00 — Foundation**, with
-**S01 — Warehouse Core** as its next milestone. Some warehouse-core data and
-API functionality is already present in the backend; the dashboard does not
-yet expose it as a complete operator interface.
+WARETRACE is currently being simplified around one hackathon problem:
+inventory discrepancies and costly manual investigations. The MVP uses
+persisted expected inventory and separately labeled synthetic or imported
+observations to prioritize explainable discrepancies. It does not silently
+correct stock or claim that a robot, RAG system or external WMS is complete.
+
+Available workflows include warehouse catalog, handling units, barcode
+identification, quality inspection, read-only 3D visualization, and inventory
+audits. The audit workflow records manual or CSV observations against an
+immutable expected-stock snapshot, then supports deterministic findings and
+supervisor review without automatically changing inventory. Robot automation,
+RAG retrieval and repackaging remain incomplete.
+
+**This is an early-stage prototype.** The current web app is a foundation
+dashboard with live warehouse metrics and operational screens. The active API
+provides health, warehouse catalog, handling-unit, inspection, and inventory
+audit endpoints. Some experimental modules remain source-only or require
+further verification; check the status labels in the app before treating them
+as operational features.
 
 ## What works today
 
@@ -30,8 +41,12 @@ yet expose it as a complete operator interface.
 
 - React and TypeScript application served by Vite.
 - Shows backend connection status and lets you retry the health check.
-- Presents inventory, receiving, repacking, simulation, knowledge, and
-  assistant areas as planned capabilities.
+- Provides inventory, handling-unit, scan/identify, inspection, and inventory
+  audit screens alongside the read-only 3D warehouse view.
+- The audit screen supports SIMULATED or OPERATIONAL sessions, manual counts,
+  validated CSV import, snapshot comparison, finding evidence, and recorded
+  supervisor review/resolution.
+- Non-matching audit findings highlight their persisted bin IDs in the 3D view.
 
 ### API and data
 
@@ -43,6 +58,8 @@ yet expose it as a complete operator interface.
 - Read-only catalog endpoints for warehouses, zones, bins, SKUs, and expected
   inventory.
 - Handling-unit creation, lookup, movement, and event-history endpoints.
+- Audit sessions, immutable expected-stock snapshots, observations,
+  deterministic findings, and append-only supervisor actions.
 - Version checks and transactional inventory updates for handling-unit moves.
 - A synthetic demo warehouse seeder, restricted to development mode.
 
@@ -53,11 +70,9 @@ not geometric volume or weight.
 
 ### Planned and in-progress areas
 
-The repository also contains early modules and UI screens for receiving and
-inspection, repacking, warehouse audits and simulation, vision/OCR, knowledge
-retrieval, and an operational assistant. They are not all mounted in the
-active API or presented as working flows in the current dashboard. Treat them
-as development work rather than released capabilities.
+The repository also contains early work for robot automation, repacking,
+vision/OCR, knowledge retrieval, and an operational assistant. Treat these as
+development work rather than released capabilities.
 
 ## Technology
 
@@ -167,6 +182,13 @@ Unless changed with `WARETRACE_API_PREFIX`, the API base is `/api/v1`.
 | `GET` | `/handling-units/{hu_id}` | Get a handling unit |
 | `POST` | `/handling-units/{hu_id}/move` | Move a handling unit to a storage bin |
 | `GET` | `/handling-units/{hu_id}/events` | Paginated handling-unit event history |
+| `POST` | `/audits` | Start an audit and capture its expected-stock snapshot |
+| `POST` | `/audits/{audit_id}/observations` | Record a manual stock observation |
+| `POST` | `/audits/{audit_id}/observations/import` | Import validated CSV observations |
+| `GET` | `/audits/{audit_id}/snapshot` | Read the immutable audit-start snapshot |
+| `POST` | `/audits/{audit_id}/compare` | Compare observations and create deterministic findings |
+| `GET` | `/audits/{audit_id}/findings` | Read discrepancy and handling-unit findings |
+| `POST` | `/audits/{audit_id}/findings/{finding_id}/actions` | Record supervisor review or resolution |
 
 Paginated endpoints use `page` and `page_size` query parameters. For exact
 request and response schemas, visit `/docs` while the backend is running.
@@ -182,6 +204,8 @@ Warehouse
 
 SKU ── Handling units
 Handling unit ── Warehouse events
+Inventory audit ── Expected-stock snapshot
+Inventory audit ── Stock observations ── Findings ── Supervisor actions
 ```
 
 Warehouse events record creation and movement details, including before/after
@@ -205,9 +229,9 @@ backend/
   alembic/        Database migrations
   tests/          Backend tests
 frontend/
-  src/app/        Active foundation dashboard
-  src/api/        API client and health check
-  src/features/   Planned and prototype workflow screens
+  src/app/        Active application shell and navigation
+  src/api/        Shared API clients
+  src/features/   Dashboard, inventory, audit, inspection, and 3D screens
 data/fixtures/    Sample warehouse and inventory data
 ```
 
@@ -236,11 +260,10 @@ Pop-Location
 ## Current limitations
 
 - This is a prototype, not a production deployment.
-- The active frontend is a connectivity and project-status dashboard, not yet
-  a complete warehouse operations console.
-- Only the health, catalog, and handling-unit routers are registered in the
-  active API. Other workflow code is not necessarily reachable through HTTP.
-- The demo API has no authentication or authorization. Do not expose it to
+- The active frontend includes operational screens, but this is not yet a
+  complete warehouse-management system.
+- Audit actors are recorded as labels; the demo does not authenticate
+  supervisor identities or roles. Do not expose the development API to
   untrusted networks or use it for real operational data.
 - The demo seeder creates synthetic data; it is not an import pipeline for
   production inventory.

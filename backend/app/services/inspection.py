@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.security import require_local_operational_writes
 from app.db.base import utc_now
 from app.models import (
     HandlingUnit,
@@ -54,6 +55,7 @@ def record_inspection(
     hu_id: UUID,
     request: InspectionCreate,
 ) -> InspectionRead:
+    require_local_operational_writes()
     with db.begin():
         hu = db.scalar(
             select(HandlingUnit).where(HandlingUnit.id == hu_id).with_for_update()

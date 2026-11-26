@@ -27,6 +27,8 @@ export interface Warehouse3DViewerProps {
   realtimeClient?: WarehouseRealtimeClient | null;
   /** Controlled selected bin UUID (optional — component manages internal selection if omitted) */
   selectedBinId?: string | null;
+  /** Stable bin UUIDs associated with active inventory audit findings */
+  highlightedBinIds?: string[];
   /** Callback fired whenever a bin is selected or deselected in the 3D scene */
   onBinSelect?: (bin: NormalizedBin | null) => void;
   /** Zone kind visibility filters */
@@ -66,6 +68,7 @@ export function Warehouse3DViewer({
   dataProvider,
   realtimeClient = null,
   selectedBinId: controlledSelectedBinId,
+  highlightedBinIds = [],
   onBinSelect,
   visibleZoneKinds = DEFAULT_VISIBLE_ZONES,
   cameraDirective = null,
@@ -98,6 +101,10 @@ export function Warehouse3DViewer({
 
   const selectedBinId =
     controlledSelectedBinId !== undefined ? controlledSelectedBinId : internalSelectedBinId;
+  const auditAffectedBinIds = useMemo(
+    () => new Set(highlightedBinIds),
+    [highlightedBinIds],
+  );
 
   const selectedBin = useMemo(
     () => findBinById(snapshot, selectedBinId),
@@ -291,6 +298,7 @@ export function Warehouse3DViewer({
           <WarehouseScene
             snapshot={snapshot}
             selectedBinId={selectedBinId}
+            auditAffectedBinIds={auditAffectedBinIds}
             hoveredBinId={hoveredBin?.id ?? null}
             visibleZoneKinds={visibleZoneKinds}
             cameraDirective={activeCameraDirective}

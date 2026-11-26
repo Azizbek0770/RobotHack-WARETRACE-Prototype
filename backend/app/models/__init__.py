@@ -1,3 +1,16 @@
+from app.models.audit import (
+    AuditDataClassification,
+    AuditFinding,
+    AuditFindingAction,
+    AuditFindingActionType,
+    AuditFindingStatus,
+    AuditFindingType,
+    AuditStatus,
+    InventoryAudit,
+    InventoryAuditSnapshot,
+    StockObservation,
+    StockObservationSource,
+)
 from app.models.event import WarehouseEvent, WarehouseEventType
 from app.models.handling_unit import (
     HandlingUnit,
@@ -14,11 +27,22 @@ from app.models.warehouse import (
 
 __all__ = [
     "SKU",
+    "AuditDataClassification",
+    "AuditFinding",
+    "AuditFindingAction",
+    "AuditFindingActionType",
+    "AuditFindingStatus",
+    "AuditFindingType",
+    "AuditStatus",
     "ExpectedInventory",
     "HandlingUnit",
     "HandlingUnitInspection",
     "HandlingUnitStatus",
     "InspectionResult",
+    "InventoryAudit",
+    "InventoryAuditSnapshot",
+    "StockObservation",
+    "StockObservationSource",
     "StorageBin",
     "Warehouse",
     "WarehouseEvent",
