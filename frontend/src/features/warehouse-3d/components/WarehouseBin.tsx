@@ -11,6 +11,7 @@ interface WarehouseBinProps {
   bin: NormalizedBin;
   rotationY: number;
   isSelected: boolean;
+  isAuditAffected: boolean;
   isHovered: boolean;
   onSelect: (bin: NormalizedBin) => void;
   onHover: (bin: NormalizedBin | null) => void;
@@ -29,6 +30,7 @@ export function WarehouseBin({
   bin,
   rotationY,
   isSelected,
+  isAuditAffected,
   isHovered,
   onSelect,
   onHover,
@@ -86,12 +88,15 @@ export function WarehouseBin({
     invalidate();
   };
 
-  const showOutline = isSelected || isHovered || !bin.isAccessible;
+  const showOutline =
+    isSelected || isAuditAffected || isHovered || !bin.isAccessible;
   const outlineColor = isSelected
     ? WARETRACE_COLORS.selected
     : !bin.isAccessible
       ? WARETRACE_COLORS.inaccessible
-      : WARETRACE_COLORS.hover;
+      : isAuditAffected
+        ? WARETRACE_COLORS.auditAffected
+        : WARETRACE_COLORS.hover;
 
   return (
     <group
@@ -115,14 +120,22 @@ export function WarehouseBin({
       {/* Pallets & parcels driven by expected_qty (or quarantined HU) */}
       <ParcelMesh bin={bin} shelfLevelsY={shelfLevels} enableShadows={enableShadows} />
 
-      {/* Floor highlight pad when selected, hovered, or inaccessible */}
+      {/* Floor highlight pad for selection, audit findings, hover or access warnings */}
       {showOutline && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.036, 0]}>
           <planeGeometry args={[width + 0.24, depth + 0.24]} />
           <meshBasicMaterial
             color={outlineColor}
             transparent
-            opacity={isSelected ? 0.28 : !bin.isAccessible ? 0.22 : 0.14}
+            opacity={
+              isSelected
+                ? 0.28
+                : !bin.isAccessible
+                  ? 0.22
+                  : isAuditAffected
+                    ? 0.26
+                    : 0.14
+            }
             depthWrite={false}
             polygonOffset
             polygonOffsetFactor={-2}
@@ -131,7 +144,7 @@ export function WarehouseBin({
         </mesh>
       )}
 
-      {/* Luminous 3D wireframe edge frame for selected / hovered / inaccessible bin */}
+      {/* Luminous 3D wireframe edge frame for selected / audit / hover / inaccessible bin */}
       {showOutline && (
         <lineSegments geometry={outlineGeometry} position={[0, height / 2 + 0.04, 0]}>
           <lineBasicMaterial color={outlineColor} />

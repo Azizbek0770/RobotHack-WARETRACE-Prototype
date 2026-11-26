@@ -7,6 +7,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.security import require_local_operational_writes
 from app.db.base import utc_now
 from app.models import (
     SKU,
@@ -54,6 +55,7 @@ def create_hu(
     db: Session,
     request: HandlingUnitCreate,
 ) -> HandlingUnitRead:
+    require_local_operational_writes()
     try:
         with db.begin():
             if db.get(SKU, request.sku_id) is None:
@@ -103,6 +105,7 @@ def move_hu(
     hu_id: UUID,
     request: HandlingUnitMove,
 ) -> HandlingUnitRead:
+    require_local_operational_writes()
     try:
         with db.begin():
             hu = db.scalar(
