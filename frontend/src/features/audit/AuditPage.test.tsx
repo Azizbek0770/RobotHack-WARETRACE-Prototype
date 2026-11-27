@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getBins,
@@ -29,14 +29,20 @@ vi.mock("../warehouse-3d", () => ({
   Warehouse3DViewer: ({
     selectedBinId,
     highlightedBinIds,
+    amrVisualization,
   }: {
     selectedBinId: string | null;
     highlightedBinIds: string[];
+    amrVisualization?: { phase: string; pose: { mastExtension: number } } | null;
   }) => (
     <output
       data-testid="audit-warehouse-viewer"
       data-selected-bin-id={selectedBinId ?? ""}
       data-highlighted-bin-ids={highlightedBinIds.join(",")}
+      data-amr-phase={amrVisualization?.phase ?? ""}
+      data-amr-mast={
+        amrVisualization ? String(amrVisualization.pose.mastExtension) : ""
+      }
     />
   ),
 }));
@@ -52,6 +58,7 @@ vi.mock("./api", () => ({
   listObservations: vi.fn(),
   recordFindingAction: vi.fn(),
   recordManualObservation: vi.fn(),
+  recordObservationEvent: vi.fn(),
   startAudit: vi.fn(),
 }));
 
@@ -78,13 +85,14 @@ function makeAudit(
   id: string,
   requestKey: string,
   status: auditApi.AuditState = "OPEN",
+  classification: auditApi.AuditClassification = "SIMULATED",
 ): auditApi.AuditSession {
   return {
     id,
     warehouse_id: warehouseId,
     request_key: requestKey,
     started_by: "Demo Operator",
-    classification: "SIMULATED",
+    classification,
     status,
     snapshot_taken_at: timestamp,
     created_at: timestamp,
@@ -113,6 +121,10 @@ function makeFinding(
     created_at: timestamp,
   };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -195,9 +207,14 @@ beforeEach(() => {
     },
   ]);
   vi.mocked(auditApi.listAudits).mockResolvedValue([]);
-  vi.mocked(auditApi.startAudit).mockImplementation(async () => {
+  vi.mocked(auditApi.startAudit).mockImplementation(async (request) => {
     const auditNumber = ++state.auditNumber;
-    const audit = makeAudit(`audit-${auditNumber}`, `demo-audit-${auditNumber}`);
+    const audit = makeAudit(
+      `audit-${auditNumber}`,
+      `demo-audit-${auditNumber}`,
+      "OPEN",
+      request.classification,
+    );
     state.audits.set(audit.id, audit);
     state.observations.set(audit.id, []);
     state.findings.set(audit.id, []);
@@ -250,6 +267,30 @@ beforeEach(() => {
         source_observed_at: null,
         classification: "SIMULATED",
         handling_unit_codes: [],
+        created_at: timestamp,
+      };
+      state.observations.set(auditId, [
+        ...(state.observations.get(auditId) ?? []),
+        observation,
+      ]);
+      return observation;
+    },
+  );
+  vi.mocked(auditApi.recordObservationEvent).mockImplementation(
+    async (auditId, request) => {
+      const observation: auditApi.StockObservation = {
+        id: `observation-${++state.observationNumber}`,
+        audit_id: auditId,
+        bin_id: request.bin_id,
+        sku_id: request.sku_id,
+        observed_qty: request.observed_qty,
+        source: request.source,
+        observed_by: request.observed_by,
+        source_device_id: request.device_id,
+        source_event_id: request.event_id,
+        source_observed_at: request.observed_at,
+        classification: state.audits.get(auditId)?.classification ?? "SIMULATED",
+        handling_unit_codes: request.handling_unit_codes ?? [],
         created_at: timestamp,
       };
       state.observations.set(auditId, [
@@ -442,6 +483,182 @@ describe("inventory audit demo flow", () => {
       expect.objectContaining({ action: "RESOLVE", actor: "Supervisor One" }),
     );
     expect(getExpectedInventory).not.toHaveBeenCalled();
+  });
+
+  it("runs simulated AMR motion, mast elevation, explicit submission, mismatch, bin highlighting, and supervisor review", async () => {
+    render(<AuditPage />);
+
+    await screen.findByRole("heading", { name: "Start an audit" });
+    fireEvent.change(screen.getByPlaceholderText("Enter an actor label"), {
+      target: { value: "Demo Operator" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start audit" }));
+    await screen.findByText("demo-audit-1");
+
+    const binSelect = (await screen.findByLabelText(
+      "AMR target bin",
+    )) as HTMLSelectElement;
+    const skuSelect = (await screen.findByLabelText(
+      "AMR target SKU",
+    )) as HTMLSelectElement;
+    expect(binSelect.value).toBe(binId);
+    expect(skuSelect.value).toBe(skuId);
+
+    const viewer = await screen.findByTestId("audit-warehouse-viewer");
+    expect(viewer).toHaveAttribute("data-amr-phase", "IDLE");
+
+    vi.useFakeTimers({
+      toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Start AMR mission" }));
+    expect(viewer).toHaveAttribute("data-amr-phase", "TRAVELING");
+    expect(auditApi.recordObservationEvent).not.toHaveBeenCalled();
+
+    // Advance into travel then test Pause and Resume
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByText(/\(Paused\)/)).toBeInTheDocument();
+    const resumeButton = screen.getByRole("button", { name: "Resume" });
+    expect(resumeButton).toBeEnabled();
+    fireEvent.click(resumeButton);
+
+    // Advance remaining timeline to complete travel, stopping, mast elevation, and simulated scan
+    for (let step = 0; step < 320; step += 1) {
+      if (viewer.getAttribute("data-amr-phase") === "SCANNED") break;
+      await act(async () => {
+        vi.advanceTimersByTime(32);
+      });
+    }
+
+    vi.useRealTimers();
+
+    expect(viewer).toHaveAttribute("data-amr-phase", "SCANNED");
+    expect(viewer).toHaveAttribute("data-amr-mast", "1");
+    expect(screen.getByText("Simulated scan complete")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("6 (Δ -2)")).toBeInTheDocument();
+
+    // Must not auto-submit while animating or upon completing scan
+    expect(auditApi.recordObservationEvent).not.toHaveBeenCalled();
+
+    const submitButton = screen.getByRole("button", {
+      name: "Submit SIMULATED_AMR observation",
+    });
+    expect(submitButton).toBeEnabled();
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(auditApi.recordObservationEvent).toHaveBeenCalledTimes(1);
+    });
+    expect(auditApi.recordObservationEvent).toHaveBeenCalledWith(
+      "audit-1",
+      expect.objectContaining({
+        source: "SIMULATED_AMR",
+        device_id: "sim-amr-01",
+        observed_qty: 6,
+        bin_id: binId,
+        sku_id: skuId,
+        observed_by: "sim-amr-01",
+        event_id: expect.stringMatching(/^sim-amr-a-01-/),
+      }),
+    );
+
+    const responseOutput = await screen.findByLabelText(
+      "Persisted AMR observation response",
+    );
+    expect(responseOutput).toHaveTextContent("SIMULATED_AMR");
+    expect(responseOutput).toHaveTextContent("sim-amr-01");
+    expect(responseOutput).toHaveTextContent("6");
+
+    // Duplicate submission is prevented after persistence
+    const persistedButton = screen.getByRole("button", {
+      name: "Observation persisted",
+    });
+    expect(persistedButton).toBeDisabled();
+    fireEvent.click(persistedButton);
+    expect(auditApi.recordObservationEvent).toHaveBeenCalledTimes(1);
+
+    // Compare to produce deterministic MISSING -2 finding and highlight A-01
+    fireEvent.click(
+      screen.getByRole("button", { name: "Compare with snapshot" }),
+    );
+    expect(
+      await screen.findByText("MISSING", { selector: ".audit-finding-title" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/-2/, { selector: ".audit-finding-delta" })).toBeInTheDocument();
+    expect(viewer).toHaveAttribute("data-highlighted-bin-ids", binId);
+    expect(viewer).toHaveAttribute("data-selected-bin-id", binId);
+
+    // Complete supervisor review -> resolve workflow
+    fireEvent.change(screen.getByPlaceholderText("Enter actor label"), {
+      target: { value: "Supervisor One" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Record supervisor review" }),
+    );
+    await screen.findByText("REVIEW", { selector: "strong" });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve finding" }));
+    await screen.findByText("RESOLVE", { selector: "strong" });
+    expect(getExpectedInventory).not.toHaveBeenCalled();
+  });
+
+  it("shows visible AMR submission failures, supports Reset AMR, and blocks SIMULATED_AMR on OPERATIONAL audits", async () => {
+    vi.mocked(auditApi.recordObservationEvent).mockRejectedValueOnce(
+      new Error("Observation source event has already been processed"),
+    );
+
+    render(<AuditPage />);
+    await screen.findByRole("heading", { name: "Start an audit" });
+    fireEvent.change(screen.getByPlaceholderText("Enter an actor label"), {
+      target: { value: "Demo Operator" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start audit" }));
+    await screen.findByText("demo-audit-1");
+
+    const viewer = await screen.findByTestId("audit-warehouse-viewer");
+    vi.useFakeTimers({
+      toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start AMR mission" }));
+    for (let step = 0; step < 320; step += 1) {
+      if (viewer.getAttribute("data-amr-phase") === "SCANNED") break;
+      await act(async () => {
+        vi.advanceTimersByTime(32);
+      });
+    }
+    vi.useRealTimers();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Submit SIMULATED_AMR observation" }),
+    );
+    expect(
+      await screen.findByText("AMR observation could not be persisted."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Observation source event has already been processed")
+        .length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset AMR" }));
+    expect(viewer).toHaveAttribute("data-amr-phase", "IDLE");
+    expect(viewer).toHaveAttribute("data-amr-mast", "0");
+
+    // Operational audit rejects SIMULATED_AMR mission controls
+    fireEvent.click(screen.getByRole("button", { name: "Start another audit" }));
+    fireEvent.change(await screen.findByLabelText("Data classification"), {
+      target: { value: "OPERATIONAL" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start audit" }));
+    await screen.findByText("demo-audit-2");
+    expect(
+      await screen.findByText(/Simulated AMR missions require a SIMULATED audit/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start AMR mission" }),
+    ).not.toBeInTheDocument();
   });
 
   async function enterAndCompareCount(quantity: string) {

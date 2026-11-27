@@ -17,6 +17,7 @@ import type { CameraDirective } from './SceneCamera';
 import { WarehouseControls } from './WarehouseControls';
 import { WarehouseScene } from './WarehouseScene';
 import { isSoftwareWebGL } from './warehouseMaterials';
+import type { AmrVisualizationState } from '../services/amrMission';
 
 export interface Warehouse3DViewerProps {
   /** Active warehouse UUID to visualize */
@@ -35,6 +36,8 @@ export interface Warehouse3DViewerProps {
   visibleZoneKinds?: Record<ZoneKind, boolean>;
   /** Programmatic camera directive (Isometric, Top-Down, Reset, Focus Bin) */
   cameraDirective?: CameraDirective | null;
+  /** Optional simulated telescopic-mast AMR visualization state */
+  amrVisualization?: AmrVisualizationState | null;
   /** Render quality preset ('high' | 'lite') */
   quality?: RenderQuality;
   /** Increment to trigger an imperative authoritative refresh */
@@ -72,6 +75,7 @@ export function Warehouse3DViewer({
   onBinSelect,
   visibleZoneKinds = DEFAULT_VISIBLE_ZONES,
   cameraDirective = null,
+  amrVisualization = null,
   quality = 'high',
   refreshNonce = 0,
   externalError = null,
@@ -259,6 +263,7 @@ export function Warehouse3DViewer({
       data-source={dataProvider.source}
       data-bin-count={snapshot?.stats.totalBins ?? 0}
       data-selected-bin={selectedBin?.code ?? ''}
+      data-amr-phase={amrVisualization?.phase ?? ''}
       className={`relative h-full w-full overflow-hidden bg-[#091321] ${className}`}
     >
       {/* 3D WebGL Canvas (frameloop="demand" keeps CPU/GPU cool on ordinary laptops & software GL) */}
@@ -302,6 +307,7 @@ export function Warehouse3DViewer({
             hoveredBinId={hoveredBin?.id ?? null}
             visibleZoneKinds={visibleZoneKinds}
             cameraDirective={activeCameraDirective}
+            amrVisualization={amrVisualization}
             quality={quality}
             onSelectBin={handleSelectBin}
             onHoverBin={setHoveredBin}

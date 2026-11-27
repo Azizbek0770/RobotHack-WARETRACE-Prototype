@@ -1289,9 +1289,104 @@ button:focus-visible {
   font-size: 11px;
 }
 
+.audit-amr-panel .panel-heading .muted {
+  margin: 7px 0 0;
+  font-size: 12px;
+}
+
+.audit-amr-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #2b6e82;
+  border-radius: 999px;
+  padding: 6px 11px;
+  background: #0d2534;
+  color: #9be7f8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.audit-amr-config {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.audit-amr-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.audit-amr-telemetry {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.audit-amr-telemetry > div {
+  border: 1px solid #293b52;
+  border-radius: 10px;
+  background: #0e1929;
+  padding: 10px 12px;
+}
+
+.audit-amr-telemetry span {
+  display: block;
+  color: #94a8bf;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.audit-amr-telemetry strong {
+  color: #eff6ff;
+  font-size: 13px;
+}
+
+.audit-amr-submit-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #3c5473;
+  border-radius: 10px;
+  background: #101f33;
+  padding: 13px 15px;
+  margin-bottom: 12px;
+}
+
+.audit-amr-submit-card p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.audit-amr-response {
+  display: block;
+  border: 1px solid #2d7f70;
+  border-radius: 10px;
+  background: #102821;
+  padding: 12px 14px;
+  color: #d7f5eb;
+  font-size: 12px;
+}
+
+.audit-amr-response p {
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
 @media (max-width: 1050px) {
   .audit-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .audit-amr-telemetry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .audit-findings-layout {
@@ -1312,8 +1407,14 @@ button:focus-visible {
     flex-direction: column;
   }
 
-  .audit-entry-grid {
+  .audit-entry-grid,
+  .audit-amr-config {
     grid-template-columns: 1fr;
+  }
+
+  .audit-amr-submit-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .audit-session-controls > .field,

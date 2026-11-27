@@ -105,6 +105,18 @@ interface CreateObservationRequest {
   handling_unit_codes?: string[];
 }
 
+export interface ObservationEventRequest {
+  source: "SCANNER" | "SIMULATED_AMR";
+  event_id: string;
+  device_id: string;
+  observed_at: string;
+  bin_id: string;
+  sku_id: string;
+  observed_qty: number;
+  observed_by: string;
+  handling_unit_codes?: string[];
+}
+
 interface FindingActionRequest {
   action: FindingActionType;
   actor: string;
@@ -318,6 +330,20 @@ export async function recordManualObservation(
   return parseOne(
     await apiPost(
       `/audits/${encodeURIComponent(auditId)}/observations`,
+      request,
+    ),
+    isObservation,
+    "observation",
+  );
+}
+
+export async function recordObservationEvent(
+  auditId: string,
+  request: ObservationEventRequest,
+): Promise<StockObservation> {
+  return parseOne(
+    await apiPost(
+      `/audits/${encodeURIComponent(auditId)}/observations/events`,
       request,
     ),
     isObservation,

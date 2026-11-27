@@ -10,9 +10,11 @@ import type {
   ZoneKind,
 } from '../data/contracts';
 import { SceneCamera, type CameraDirective } from './SceneCamera';
+import { WarehouseAmr } from './WarehouseAmr';
 import { WarehouseFloor } from './WarehouseFloor';
 import { WarehouseZone } from './WarehouseZone';
 import { WARETRACE_COLORS, isSoftwareWebGL } from './warehouseMaterials';
+import type { AmrVisualizationState } from '../services/amrMission';
 
 interface WarehouseSceneProps {
   snapshot: WarehouseSnapshot | null;
@@ -21,6 +23,7 @@ interface WarehouseSceneProps {
   hoveredBinId: string | null;
   visibleZoneKinds: Record<ZoneKind, boolean>;
   cameraDirective: CameraDirective | null;
+  amrVisualization?: AmrVisualizationState | null;
   quality: RenderQuality;
   onSelectBin: (bin: NormalizedBin) => void;
   onHoverBin: (bin: NormalizedBin | null) => void;
@@ -67,6 +70,7 @@ export function WarehouseScene({
   hoveredBinId,
   visibleZoneKinds,
   cameraDirective,
+  amrVisualization = null,
   quality,
   onSelectBin,
   onHoverBin,
@@ -134,6 +138,11 @@ export function WarehouseScene({
           enableShadows={enableShadows}
         />
       ))}
+
+      {/* Simulated telescopic-mast AMR */}
+      {amrVisualization && (
+        <WarehouseAmr amr={amrVisualization} enableShadows={enableShadows} />
+      )}
 
       <SceneCamera directive={cameraDirective} />
     </>

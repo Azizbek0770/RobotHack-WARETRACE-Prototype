@@ -12,6 +12,24 @@ import {
   type Zone,
 } from "../../api/warehouse";
 import { ApiWarehouseProvider } from "../warehouse-3d/services/apiProvider";
+import type { WarehouseSnapshot } from "../warehouse-3d/data/contracts";
+import { buildWarehouseSnapshot } from "../warehouse-3d/data/warehouseMapper";
+import {
+  AMR_DEFAULT_ACTOR_LABEL,
+  AMR_DEFAULT_DEVICE_ID,
+  createInitialAmrMission,
+  deriveSimulatedObservedQty,
+  pauseAmrMission,
+  planAmrRoute,
+  resetAmrMission,
+  resumeAmrMission,
+  selectDefaultAmrTarget,
+  startAmrMission,
+  stepAmrMission,
+  type AmrMissionState,
+  type AmrPhase,
+  type AmrVisualizationState,
+} from "../warehouse-3d/services/amrMission";
 import {
   compareAudit,
   getAudit,
@@ -23,6 +41,7 @@ import {
   listObservations,
   recordFindingAction,
   recordManualObservation,
+  recordObservationEvent,
   startAudit,
   type AuditFinding,
   type AuditSession,
@@ -144,6 +163,26 @@ function sortFindings(
   });
 }
 
+function amrPhaseLabel(phase: AmrPhase, isPaused: boolean): string {
+  const base = (() => {
+    switch (phase) {
+      case "IDLE":
+        return "Idle at staging pad";
+      case "TRAVELING":
+        return "Traveling along preplanned aisle";
+      case "STOPPING":
+        return "Stopping and aligning to bin";
+      case "ELEVATING_MAST":
+        return "Elevating telescopic mast";
+      case "SCANNING":
+        return "Scanning bin (simulated)";
+      case "SCANNED":
+        return "Simulated scan complete";
+    }
+  })();
+  return isPaused ? `${base} (Paused)` : base;
+}
+
 export default function AuditPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [skus, setSkus] = useState<SKU[]>([]);
@@ -180,7 +219,21 @@ export default function AuditPage() {
   const [observedQuantity, setObservedQuantity] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [viewerSnapshot, setViewerSnapshot] = useState<WarehouseSnapshot | null>(
+    null,
+  );
+  const [amrBinId, setAmrBinId] = useState("");
+  const [amrSkuId, setAmrSkuId] = useState("");
+  const [amrDeviceId, setAmrDeviceId] = useState(AMR_DEFAULT_DEVICE_ID);
+  const [amrState, setAmrState] = useState<AmrMissionState>(() =>
+    createInitialAmrMission(null),
+  );
+  const [amrSubmitBusy, setAmrSubmitBusy] = useState(false);
+  const [amrSubmitError, setAmrSubmitError] = useState("");
+  const [amrPersistedResponse, setAmrPersistedResponse] =
+    useState<StockObservation | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const amrSubmittingRef = useRef(false);
 
   const warehouseProvider = useMemo(
     () =>
@@ -217,6 +270,52 @@ export default function AuditPage() {
       ),
     [snapshot],
   );
+  const selectedWarehouse = useMemo(
+    () => warehouses.find((warehouse) => warehouse.id === warehouseId) ?? null,
+    [warehouses, warehouseId],
+  );
+  const effectiveSnapshot = useMemo(() => {
+    if (viewerSnapshot && viewerSnapshot.warehouse.id === warehouseId) {
+      return viewerSnapshot;
+    }
+    if (!selectedWarehouse || zones.length === 0 || bins.length === 0) {
+      return null;
+    }
+    return buildWarehouseSnapshot({
+      warehouse: selectedWarehouse,
+      zones,
+      bins,
+      expectedInventory: [],
+      handlingUnits: [],
+      source: "api",
+      fetchedAt: "",
+    });
+  }, [viewerSnapshot, warehouseId, selectedWarehouse, zones, bins]);
+  const defaultAmrTarget = useMemo(
+    () => selectDefaultAmrTarget(bins, skus, snapshot?.items ?? []),
+    [bins, skus, snapshot],
+  );
+  const effectiveAmrBinId =
+    amrBinId && bins.some((bin) => bin.id === amrBinId)
+      ? amrBinId
+      : defaultAmrTarget.binId;
+  const effectiveAmrSkuId =
+    amrSkuId && skus.some((sku) => sku.id === amrSkuId)
+      ? amrSkuId
+      : defaultAmrTarget.skuId;
+  const amrRoutePlan = useMemo(
+    () => planAmrRoute(effectiveSnapshot, effectiveAmrBinId),
+    [effectiveSnapshot, effectiveAmrBinId],
+  );
+  const activeAmrState = useMemo(() => {
+    if (amrState.phase === "IDLE") {
+      return createInitialAmrMission(amrRoutePlan);
+    }
+    if (amrState.routePlan?.targetBinId === amrRoutePlan?.targetBinId) {
+      return { ...amrState, routePlan: amrRoutePlan };
+    }
+    return createInitialAmrMission(amrRoutePlan);
+  }, [amrState, amrRoutePlan]);
 
   const orderedFindings = useMemo(
     () =>
@@ -417,6 +516,23 @@ export default function AuditPage() {
     return () => controller.abort();
   }, [audit, selectedFindingId]);
 
+  useEffect(() => {
+    if (!activeAmrState.isRunning || activeAmrState.isPaused) return;
+    let rafId = 0;
+    let lastTimestamp: number | null = null;
+
+    const tick = (now: number) => {
+      const deltaSeconds =
+        lastTimestamp === null ? 0.016 : (now - lastTimestamp) / 1000;
+      lastTimestamp = now;
+      setAmrState((current) => stepAmrMission(current, deltaSeconds));
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [activeAmrState.isRunning, activeAmrState.isPaused]);
+
   async function handleStartAudit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -438,6 +554,10 @@ export default function AuditPage() {
       setActions([]);
       setSelectedFindingId("");
       setFocusedBinId(null);
+      setViewerSnapshot(null);
+      setAmrPersistedResponse(null);
+      setAmrSubmitError("");
+      setAmrState(createInitialAmrMission(null));
       setSelectedAuditId(newAudit.id);
       setShowStartForm(false);
       setNotice(
@@ -626,6 +746,94 @@ export default function AuditPage() {
     }
   }
 
+  function handleAmrStart() {
+    if (
+      !audit ||
+      audit.classification !== "SIMULATED" ||
+      audit.status !== "OPEN" ||
+      !amrRoutePlan
+    ) {
+      return;
+    }
+    setAmrSubmitError("");
+    setAmrPersistedResponse(null);
+    setFocusedBinId(amrRoutePlan.targetBinId);
+    setAmrState(startAmrMission(createInitialAmrMission(amrRoutePlan)));
+  }
+
+  function handleAmrPause() {
+    setAmrState((current) => pauseAmrMission(current));
+  }
+
+  function handleAmrResume() {
+    setAmrState((current) => resumeAmrMission(current));
+  }
+
+  function handleAmrReset() {
+    setAmrSubmitError("");
+    setAmrPersistedResponse(null);
+    setAmrState(resetAmrMission(amrRoutePlan));
+  }
+
+  async function handleSubmitAmrObservation() {
+    const cleanDeviceId = amrDeviceId.trim();
+    if (
+      amrSubmittingRef.current ||
+      !audit ||
+      audit.classification !== "SIMULATED" ||
+      audit.status !== "OPEN" ||
+      activeAmrState.phase !== "SCANNED" ||
+      !activeAmrState.scanEventId ||
+      !effectiveAmrBinId ||
+      !effectiveAmrSkuId ||
+      cleanDeviceId.length < 3 ||
+      amrPersistedResponse !== null ||
+      existingAmrPairObservation !== undefined
+    ) {
+      return;
+    }
+
+    amrSubmittingRef.current = true;
+    setAmrSubmitBusy(true);
+    setAmrSubmitError("");
+    setError("");
+    setNotice("");
+    try {
+      const saved = await recordObservationEvent(audit.id, {
+        source: "SIMULATED_AMR",
+        event_id: activeAmrState.scanEventId,
+        device_id: cleanDeviceId,
+        observed_at:
+          activeAmrState.scanCompletedAt ?? new Date().toISOString(),
+        bin_id: effectiveAmrBinId,
+        sku_id: effectiveAmrSkuId,
+        observed_qty: amrObservedQty,
+        observed_by: cleanDeviceId || AMR_DEFAULT_ACTOR_LABEL,
+        handling_unit_codes: [],
+      });
+      setAmrPersistedResponse(saved);
+      setObservations((current) =>
+        current.some((row) => row.id === saved.id) ? current : [...current, saved],
+      );
+      setFocusedBinId(saved.bin_id);
+      setNotice(
+        `Persisted SIMULATED_AMR event ${saved.source_event_id} for ${
+          binsById.get(saved.bin_id)?.code ?? "selected bin"
+        }.`,
+      );
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Unable to persist simulated AMR observation.";
+      setAmrSubmitError(message);
+      setError(message);
+    } finally {
+      amrSubmittingRef.current = false;
+      setAmrSubmitBusy(false);
+    }
+  }
+
   function chooseWarehouse(id: string) {
     setWarehouseId(id);
     setWarehouseState("loading");
@@ -638,6 +846,12 @@ export default function AuditPage() {
     setActions([]);
     setSelectedFindingId("");
     setFocusedBinId(null);
+    setViewerSnapshot(null);
+    setAmrBinId("");
+    setAmrSkuId("");
+    setAmrPersistedResponse(null);
+    setAmrSubmitError("");
+    setAmrState(createInitialAmrMission(null));
     setAudits([]);
     setShowStartForm(true);
     setNotice("");
@@ -654,6 +868,9 @@ export default function AuditPage() {
     setActions([]);
     setSelectedFindingId("");
     setFocusedBinId(null);
+    setAmrPersistedResponse(null);
+    setAmrSubmitError("");
+    setAmrState(resetAmrMission(amrRoutePlan));
     setShowStartForm(false);
     setNotice("");
     setError("");
@@ -670,6 +887,39 @@ export default function AuditPage() {
   );
   const expectedForEntry =
     snapshotByPair.get(pairKey)?.expected_qty ?? 0;
+  const amrExpectedQty =
+    snapshotByPair.get(`${effectiveAmrBinId}:${effectiveAmrSkuId}`)
+      ?.expected_qty ?? 0;
+  const amrObservedQty = deriveSimulatedObservedQty(amrExpectedQty);
+  const existingAmrPairObservation = observations.find(
+    (observation) =>
+      observation.bin_id === effectiveAmrBinId &&
+      observation.sku_id === effectiveAmrSkuId,
+  );
+  const canSubmitAmrMission =
+    Boolean(audit) &&
+    audit?.classification === "SIMULATED" &&
+    audit?.status === "OPEN" &&
+    activeAmrState.phase === "SCANNED" &&
+    Boolean(activeAmrState.scanEventId) &&
+    amrDeviceId.trim().length >= 3 &&
+    amrPersistedResponse === null &&
+    existingAmrPairObservation === undefined &&
+    !amrSubmitBusy &&
+    !saving;
+  const amrVisualization: AmrVisualizationState | null =
+    audit?.classification === "SIMULATED" && amrRoutePlan
+      ? {
+          deviceId: amrDeviceId.trim() || AMR_DEFAULT_DEVICE_ID,
+          phase: activeAmrState.phase,
+          isPaused: activeAmrState.isPaused,
+          pose: activeAmrState.pose,
+          waypoints: amrRoutePlan.waypoints,
+          targetBinId: amrRoutePlan.targetBinId,
+          targetBinCode: amrRoutePlan.targetBinCode,
+          targetBinWorldPosition: amrRoutePlan.targetBinWorldPosition,
+        }
+      : null;
   const comparedExpected = selectedFinding?.expected_qty;
   const actionToRecord = selectedFinding
     ? actionForStatus(selectedFinding.status)
@@ -922,6 +1172,252 @@ export default function AuditPage() {
                 Metrics are calculated from this audit’s persisted observations
                 and findings; no financial savings or projected impact is inferred.
               </p>
+
+              <section className="panel audit-amr-panel" aria-label="Simulated AMR inspection">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Simulated telescopic-mast AMR</h2>
+                    <p className="muted">
+                      Deterministic preplanned aisle route only — no SLAM, real
+                      obstacle avoidance, or hardware robot control.
+                    </p>
+                  </div>
+                  <span className="audit-amr-badge">
+                    {amrPhaseLabel(activeAmrState.phase, activeAmrState.isPaused)}
+                  </span>
+                </div>
+
+                {audit.classification !== "SIMULATED" ? (
+                  <div className="notice" role="note">
+                    Simulated AMR missions require a SIMULATED audit session.
+                    OPERATIONAL audits only accept manual, CSV, or scanner
+                    observations.
+                  </div>
+                ) : (
+                  <>
+                    <div className="audit-amr-config">
+                      <label className="field">
+                        <span>AMR target bin</span>
+                        <select
+                          aria-label="AMR target bin"
+                          value={effectiveAmrBinId}
+                          disabled={activeAmrState.phase !== "IDLE" || audit.status !== "OPEN"}
+                          onChange={(event) => {
+                            setAmrBinId(event.target.value);
+                            setAmrPersistedResponse(null);
+                            setAmrSubmitError("");
+                          }}
+                        >
+                          {bins.map((bin) => (
+                            <option key={bin.id} value={bin.id}>
+                              {bin.code} — {zonesById.get(bin.zone_id)?.code ?? "Zone"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="field">
+                        <span>AMR target SKU</span>
+                        <select
+                          aria-label="AMR target SKU"
+                          value={effectiveAmrSkuId}
+                          disabled={activeAmrState.phase !== "IDLE" || audit.status !== "OPEN"}
+                          onChange={(event) => {
+                            setAmrSkuId(event.target.value);
+                            setAmrPersistedResponse(null);
+                            setAmrSubmitError("");
+                          }}
+                        >
+                          {skus.map((sku) => (
+                            <option key={sku.id} value={sku.id}>
+                              {sku.code} — {sku.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="field">
+                        <span>AMR device ID</span>
+                        <input
+                          aria-label="AMR device ID"
+                          minLength={3}
+                          maxLength={120}
+                          value={amrDeviceId}
+                          disabled={activeAmrState.phase !== "IDLE" || audit.status !== "OPEN"}
+                          onChange={(event) => setAmrDeviceId(event.target.value)}
+                          placeholder="sim-amr-01"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="audit-amr-controls">
+                      <button
+                        type="button"
+                        className="primary-button"
+                        disabled={
+                          audit.status !== "OPEN" ||
+                          !amrRoutePlan ||
+                          !effectiveAmrSkuId ||
+                          activeAmrState.phase !== "IDLE"
+                        }
+                        onClick={handleAmrStart}
+                      >
+                        Start AMR mission
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={!activeAmrState.isRunning || activeAmrState.isPaused}
+                        onClick={handleAmrPause}
+                      >
+                        Pause
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={!activeAmrState.isRunning || !activeAmrState.isPaused}
+                        onClick={handleAmrResume}
+                      >
+                        Resume
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={activeAmrState.phase === "IDLE"}
+                        onClick={handleAmrReset}
+                      >
+                        Reset AMR
+                      </button>
+                    </div>
+
+                    <div className="audit-amr-telemetry">
+                      <div>
+                        <span>Route</span>
+                        <strong>
+                          {amrRoutePlan
+                            ? `${amrRoutePlan.totalDistanceMeters} m · ${amrRoutePlan.waypoints.length} waypoints → ${amrRoutePlan.targetBinCode}`
+                            : "Select a target bin"}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Mast elevation</span>
+                        <strong>{Math.round(activeAmrState.pose.mastExtension * 100)}%</strong>
+                      </div>
+                      <div>
+                        <span>Snapshot expected</span>
+                        <strong>{amrExpectedQty}</strong>
+                      </div>
+                      <div>
+                        <span>Simulated count</span>
+                        <strong>
+                          {activeAmrState.phase === "SCANNED"
+                            ? `${amrObservedQty} (Δ ${displayDelta(amrObservedQty - amrExpectedQty)})`
+                            : "Pending scan"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {audit.status !== "OPEN" && (
+                      <p className="audit-hint">
+                        This audit is already compared; observations are locked.
+                      </p>
+                    )}
+
+                    {activeAmrState.phase === "SCANNED" && (
+                      <div className="audit-amr-submit-card">
+                        <div>
+                          <strong>Ready for operator confirmation</strong>
+                          <p className="muted">
+                            Scan complete for{" "}
+                            <code>{binsById.get(effectiveAmrBinId)?.code ?? effectiveAmrBinId}</code> /{" "}
+                            <code>{skusById.get(effectiveAmrSkuId)?.code ?? effectiveAmrSkuId}</code>.
+                            Event ID: <code>{activeAmrState.scanEventId}</code> · Device:{" "}
+                            <code>{amrDeviceId.trim()}</code>. Observations are never
+                            auto-submitted during animation.
+                          </p>
+                          {existingAmrPairObservation && !amrPersistedResponse && (
+                            <p className="audit-hint">
+                              This bin/SKU pair already has a persisted observation in
+                              this audit; duplicate submissions are prevented.
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="primary-button"
+                          disabled={!canSubmitAmrMission}
+                          onClick={handleSubmitAmrObservation}
+                        >
+                          {amrSubmitBusy
+                            ? "Submitting…"
+                            : amrPersistedResponse
+                              ? "Observation persisted"
+                              : "Submit SIMULATED_AMR observation"}
+                        </button>
+                      </div>
+                    )}
+
+                    {amrSubmitError && (
+                      <div className="notice notice--error" role="alert">
+                        <strong>AMR observation could not be persisted.</strong>
+                        <p>{amrSubmitError}</p>
+                      </div>
+                    )}
+
+                    {amrPersistedResponse && (
+                      <output
+                        className="audit-amr-response"
+                        aria-label="Persisted AMR observation response"
+                      >
+                        <strong>Persisted SIMULATED_AMR response</strong>
+                        <p>
+                          ID <code>{amrPersistedResponse.id}</code> · source{" "}
+                          <code>{amrPersistedResponse.source}</code> · device{" "}
+                          <code>{amrPersistedResponse.source_device_id}</code> · event{" "}
+                          <code>{amrPersistedResponse.source_event_id}</code> · observed{" "}
+                          <strong>{amrPersistedResponse.observed_qty}</strong> · class{" "}
+                          <code>{amrPersistedResponse.classification}</code>
+                        </p>
+                      </output>
+                    )}
+                  </>
+                )}
+              </section>
+
+              <section className="panel audit-3d-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Warehouse 3D digital twin &amp; affected bins</h2>
+                    <p className="muted">
+                      Shows the preplanned AMR route in SIMULATED audits and amber
+                      outlines on affected/non-match persisted bin UUIDs.
+                    </p>
+                  </div>
+                  <span>{affectedBinIds.length} affected bins</span>
+                </div>
+                <div className="audit-3d-viewport">
+                  <Suspense
+                    fallback={
+                      <div className="notice" role="status">
+                        Loading the 3D warehouse viewer…
+                      </div>
+                    }
+                  >
+                    <Warehouse3DViewer
+                      warehouseId={warehouseId}
+                      dataProvider={warehouseProvider}
+                      selectedBinId={focusedBinId}
+                      highlightedBinIds={affectedBinIds}
+                      amrVisualization={amrVisualization}
+                      onSnapshotChange={setViewerSnapshot}
+                      onBinSelect={(bin) => setFocusedBinId(bin?.id ?? null)}
+                      realtimeClient={null}
+                      quality="lite"
+                      className="audit-3d-canvas"
+                    />
+                  </Suspense>
+                </div>
+              </section>
 
               {audit.status === "OPEN" && (
                 <section className="audit-entry-grid">
@@ -1391,45 +1887,6 @@ export default function AuditPage() {
                       </p>
                     )}
                   </aside>
-                </section>
-              )}
-
-              {(audit.status === "COMPARED" ||
-                observations.some(
-                  (observation) => observation.source === "SIMULATED_AMR",
-                )) && (
-                <section className="panel audit-3d-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h2>Affected warehouse bins</h2>
-                      <p className="muted">
-                        Amber outlines show non-match findings and bins with
-                        simulated AMR observations; highlights use persisted
-                        bin UUIDs.
-                      </p>
-                    </div>
-                    <span>{affectedBinIds.length} affected bins</span>
-                  </div>
-                  <div className="audit-3d-viewport">
-                    <Suspense
-                      fallback={
-                        <div className="notice" role="status">
-                          Loading the 3D warehouse viewer…
-                        </div>
-                      }
-                    >
-                      <Warehouse3DViewer
-                        warehouseId={warehouseId}
-                        dataProvider={warehouseProvider}
-                        selectedBinId={focusedBinId}
-                        highlightedBinIds={affectedBinIds}
-                        onBinSelect={(bin) => setFocusedBinId(bin?.id ?? null)}
-                        realtimeClient={null}
-                        quality="lite"
-                        className="audit-3d-canvas"
-                      />
-                    </Suspense>
-                  </div>
                 </section>
               )}
             </>
