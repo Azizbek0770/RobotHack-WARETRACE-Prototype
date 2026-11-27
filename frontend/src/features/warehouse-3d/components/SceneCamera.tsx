@@ -11,6 +11,7 @@ export interface CameraDirective {
   id: number;
   preset?: CameraPreset;
   focusPosition?: WorldPosition;
+  cameraPosition?: WorldPosition;
 }
 
 interface SceneCameraProps {
@@ -84,8 +85,16 @@ export function SceneCamera({ directive }: SceneCameraProps) {
     if (directive.focusPosition) {
       const { x, y, z } = directive.focusPosition;
       targetLookRef.current.set(x, Math.max(1.2, y + 1.4), z);
-      // Offset camera diagonally toward front-right and above the selected bin
-      targetPosRef.current.set(x + 5.6, Math.max(5.8, y + 5.6), z + 6.8);
+      if (directive.cameraPosition) {
+        targetPosRef.current.set(
+          directive.cameraPosition.x,
+          Math.max(1.8, directive.cameraPosition.y),
+          directive.cameraPosition.z,
+        );
+      } else {
+        // Offset camera diagonally toward front-right and above the selected bin
+        targetPosRef.current.set(x + 5.6, Math.max(5.8, y + 5.6), z + 6.8);
+      }
     } else if (directive.preset) {
       computePresetVectors(
         directive.preset,

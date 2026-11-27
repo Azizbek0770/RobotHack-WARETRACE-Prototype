@@ -12,11 +12,13 @@ import {
   type Zone,
 } from "../../api/warehouse";
 import { ApiWarehouseProvider } from "../warehouse-3d/services/apiProvider";
+import type { CameraDirective } from "../warehouse-3d/components/SceneCamera";
 import type { WarehouseSnapshot } from "../warehouse-3d/data/contracts";
 import { buildWarehouseSnapshot } from "../warehouse-3d/data/warehouseMapper";
 import {
   AMR_DEFAULT_ACTOR_LABEL,
   AMR_DEFAULT_DEVICE_ID,
+  computeAisleCameraFocus,
   createInitialAmrMission,
   deriveSimulatedObservedQty,
   pauseAmrMission,
@@ -232,8 +234,11 @@ export default function AuditPage() {
   const [amrSubmitError, setAmrSubmitError] = useState("");
   const [amrPersistedResponse, setAmrPersistedResponse] =
     useState<StockObservation | null>(null);
+  const [cameraDirective, setCameraDirective] =
+    useState<CameraDirective | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const amrSubmittingRef = useRef(false);
+  const cameraDirectiveCounterRef = useRef(1);
 
   const warehouseProvider = useMemo(
     () =>
@@ -557,6 +562,7 @@ export default function AuditPage() {
       setViewerSnapshot(null);
       setAmrPersistedResponse(null);
       setAmrSubmitError("");
+      setCameraDirective(null);
       setAmrState(createInitialAmrMission(null));
       setSelectedAuditId(newAudit.id);
       setShowStartForm(false);
@@ -576,7 +582,7 @@ export default function AuditPage() {
     }
   }
 
-  async function reloadAuditEvidence(auditId: string) {
+  async function reloadAuditEvidence(auditId: string): Promise<boolean> {
     const [auditRecord, snapshotRecord, observationRows, findingRows] =
       await Promise.all([
         getAudit(auditId),
@@ -585,9 +591,24 @@ export default function AuditPage() {
         listFindings(auditId),
       ]);
     setAudit(auditRecord);
+    setAudits((current) =>
+      current.map((item) => (item.id === auditRecord.id ? auditRecord : item)),
+    );
     setSnapshot(snapshotRecord);
     setObservations(observationRows);
     setFindings(findingRows);
+    const reconciledAmr = observationRows.find(
+      (row) =>
+        row.source === "SIMULATED_AMR" &&
+        ((activeAmrState.scanEventId &&
+          row.source_event_id === activeAmrState.scanEventId) ||
+          (row.bin_id === effectiveAmrBinId &&
+            row.sku_id === effectiveAmrSkuId)),
+    );
+    if (reconciledAmr) {
+      setAmrPersistedResponse(reconciledAmr);
+      setAmrSubmitError("");
+    }
     const prioritized = sortFindings(
       findingRows,
       new Map(observationRows.map((row) => [row.id, row])),
@@ -607,8 +628,11 @@ export default function AuditPage() {
           findingRows.find(
             (finding) => finding.id === nextSelectedFindingId,
           )?.observation_id,
-      )?.bin_id ?? null,
+      )?.bin_id ??
+        reconciledAmr?.bin_id ??
+        null,
     );
+    return Boolean(reconciledAmr);
   }
 
   async function handleManualObservation(event: FormEvent<HTMLFormElement>) {
@@ -701,8 +725,12 @@ export default function AuditPage() {
     setError("");
     setNotice("");
     try {
-      await reloadAuditEvidence(audit.id);
-      setNotice("Audit evidence refreshed from the server.");
+      const reconciled = await reloadAuditEvidence(audit.id);
+      setNotice(
+        reconciled
+          ? "Reconciled persisted observation from the server without creating a duplicate."
+          : "Audit evidence refreshed from the server.",
+      );
     } catch (refreshError) {
       setError(
         refreshError instanceof Error
@@ -769,6 +797,16 @@ export default function AuditPage() {
     setAmrState((current) => resumeAmrMission(current));
   }
 
+  function issueCameraDirective(
+    directive: Omit<CameraDirective, "id">,
+  ) {
+    cameraDirectiveCounterRef.current += 1;
+    setCameraDirective({
+      id: cameraDirectiveCounterRef.current,
+      ...directive,
+    });
+  }
+
   function handleAmrReset() {
     setAmrSubmitError("");
     setAmrPersistedResponse(null);
@@ -822,6 +860,31 @@ export default function AuditPage() {
         }.`,
       );
     } catch (submitError) {
+      // Read-only reconciliation: if the server persisted the event before the HTTP response was lost,
+      // recover the existing record instead of allowing a conflicting resubmission.
+      try {
+        const serverObservations = await listObservations(audit.id);
+        const reconciled = serverObservations.find(
+          (row) =>
+            (activeAmrState.scanEventId &&
+              row.source_event_id === activeAmrState.scanEventId) ||
+            (row.bin_id === effectiveAmrBinId &&
+              row.sku_id === effectiveAmrSkuId),
+        );
+        if (reconciled) {
+          setObservations(serverObservations);
+          setAmrPersistedResponse(reconciled);
+          setFocusedBinId(reconciled.bin_id);
+          setAmrSubmitError("");
+          setError("");
+          setNotice(
+            "Connection dropped after server persistence; reconciled existing observation without resubmitting.",
+          );
+          return;
+        }
+      } catch {
+        // Server still unreachable; fall through to visible recoverable error
+      }
       const message =
         submitError instanceof Error
           ? submitError.message
@@ -851,6 +914,7 @@ export default function AuditPage() {
     setAmrSkuId("");
     setAmrPersistedResponse(null);
     setAmrSubmitError("");
+    setCameraDirective(null);
     setAmrState(createInitialAmrMission(null));
     setAudits([]);
     setShowStartForm(true);
@@ -870,6 +934,7 @@ export default function AuditPage() {
     setFocusedBinId(null);
     setAmrPersistedResponse(null);
     setAmrSubmitError("");
+    setCameraDirective(null);
     setAmrState(resetAmrMission(amrRoutePlan));
     setShowStartForm(false);
     setNotice("");
@@ -1361,6 +1426,14 @@ export default function AuditPage() {
                       <div className="notice notice--error" role="alert">
                         <strong>AMR observation could not be persisted.</strong>
                         <p>{amrSubmitError}</p>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={saving || amrSubmitBusy}
+                          onClick={handleRefreshEvidence}
+                        >
+                          Reconcile from server
+                        </button>
                       </div>
                     )}
 
@@ -1389,11 +1462,45 @@ export default function AuditPage() {
                   <div>
                     <h2>Warehouse 3D digital twin &amp; affected bins</h2>
                     <p className="muted">
-                      Shows the preplanned AMR route in SIMULATED audits and amber
-                      outlines on affected/non-match persisted bin UUIDs.
+                      Shows the preplanned AMR route in SIMULATED audits; blue
+                      outlines mark the selected bin and amber outlines mark
+                      affected/non-match persisted bin UUIDs.
                     </p>
                   </div>
-                  <span>{affectedBinIds.length} affected bins</span>
+                  <div className="audit-3d-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => issueCameraDirective({ preset: "isometric" })}
+                    >
+                      Overview
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => issueCameraDirective({ preset: "top-down" })}
+                    >
+                      Top-Down
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={!effectiveSnapshot || !(focusedBinId || effectiveAmrBinId)}
+                      onClick={() => {
+                        const targetId = focusedBinId || effectiveAmrBinId;
+                        const focus = computeAisleCameraFocus(
+                          effectiveSnapshot,
+                          targetId,
+                        );
+                        if (focus) {
+                          issueCameraDirective(focus);
+                        }
+                      }}
+                    >
+                      Focus aisle
+                    </button>
+                    <span>{affectedBinIds.length} affected bins</span>
+                  </div>
                 </div>
                 <div className="audit-3d-viewport">
                   <Suspense
@@ -1408,7 +1515,9 @@ export default function AuditPage() {
                       dataProvider={warehouseProvider}
                       selectedBinId={focusedBinId}
                       highlightedBinIds={affectedBinIds}
+                      cameraDirective={cameraDirective}
                       amrVisualization={amrVisualization}
+                      showAmrPov={Boolean(amrVisualization)}
                       onSnapshotChange={setViewerSnapshot}
                       onBinSelect={(bin) => setFocusedBinId(bin?.id ?? null)}
                       realtimeClient={null}

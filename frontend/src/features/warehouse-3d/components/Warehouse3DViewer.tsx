@@ -38,6 +38,8 @@ export interface Warehouse3DViewerProps {
   cameraDirective?: CameraDirective | null;
   /** Optional simulated telescopic-mast AMR visualization state */
   amrVisualization?: AmrVisualizationState | null;
+  /** Optional secondary Three.js POV inset rendered from the AMR mast camera */
+  showAmrPov?: boolean;
   /** Render quality preset ('high' | 'lite') */
   quality?: RenderQuality;
   /** Increment to trigger an imperative authoritative refresh */
@@ -76,6 +78,7 @@ export function Warehouse3DViewer({
   visibleZoneKinds = DEFAULT_VISIBLE_ZONES,
   cameraDirective = null,
   amrVisualization = null,
+  showAmrPov = false,
   quality = 'high',
   refreshNonce = 0,
   externalError = null,
@@ -308,6 +311,7 @@ export function Warehouse3DViewer({
             visibleZoneKinds={visibleZoneKinds}
             cameraDirective={activeCameraDirective}
             amrVisualization={amrVisualization}
+            showAmrPov={showAmrPov}
             quality={quality}
             onSelectBin={handleSelectBin}
             onHoverBin={setHoveredBin}
@@ -382,6 +386,22 @@ export function Warehouse3DViewer({
           hoveredBin={hoveredBin}
           onFocusSelectedBin={handleFocusSelectedBin}
         />
+      )}
+
+      {/* SIMULATED POV inset label frame aligned with secondary Three.js mast camera */}
+      {!activeError && !webglLost && amrVisualization && showAmrPov && (
+        <div
+          className="amr-pov-overlay"
+          data-testid="amr-simulated-pov"
+          aria-label="Simulated AMR mast POV camera"
+        >
+          <div className="amr-pov-header">
+            <span className="amr-pov-pill">SIMULATED POV</span>
+            <span className="amr-pov-caption">
+              {amrVisualization.deviceId} · mast cam
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );

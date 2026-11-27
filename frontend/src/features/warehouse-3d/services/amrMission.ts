@@ -75,9 +75,9 @@ export const AMR_DEFAULT_DEVICE_ID = 'sim-amr-01';
 export const AMR_DEFAULT_ACTOR_LABEL = 'sim-amr-01';
 export const AMR_HOME_POSITION: AmrRoutePoint = { x: -8.8, z: 0 };
 export const AMR_HOME_HEADING_RAD = Math.PI / 2;
-export const AMR_WHEEL_RADIUS_M = 0.11;
-export const AMR_MAST_BASE_HEIGHT_M = 0.86;
-export const AMR_MAST_MAX_STROKE_M = 1.24;
+export const AMR_WHEEL_RADIUS_M = 0.125;
+export const AMR_MAST_BASE_HEIGHT_M = 0.94;
+export const AMR_MAST_MAX_STROKE_M = 1.32;
 export const AMR_DRIVE_SPEED_MPS = 3.2;
 export const AMR_TURN_RATE_RAD_PER_SEC = 3.6;
 export const AMR_STOP_DURATION_S = 0.45;
@@ -450,7 +450,7 @@ export function stepAmrMission(
     return state;
   }
 
-  const dt = Math.max(0, Math.min(0.05, deltaSeconds));
+  const dt = Math.max(0, Math.min(0.25, deltaSeconds));
   const nextElapsed = state.elapsedSeconds + dt;
   const { phase, pose } = evaluateRouteAtTime(state.routePlan, nextElapsed);
 
@@ -533,5 +533,77 @@ export function selectDefaultAmrTarget(
   return {
     binId: preferredBin.id,
     skuId: preferredSku?.id ?? '',
+  };
+}
+
+/**
+ * Compute an unobstructed 3D camera viewpoint looking down the aisle toward the target bin and AMR.
+ */
+export function computeAisleCameraFocus(
+  snapshot: WarehouseSnapshot | null,
+  binId: string,
+): {
+  cameraPosition: { x: number; y: number; z: number };
+  focusPosition: { x: number; y: number; z: number };
+} | null {
+  if (!snapshot || !binId) return null;
+  const bin = snapshot.binById[binId];
+  if (!bin) return null;
+  const zone = snapshot.zones.find((item) => item.id === bin.zoneId);
+  if (!zone) return null;
+
+  if (zone.kind === 'STORAGE') {
+    const aisleZ = resolveStorageAisleZ(zone, bin);
+    return {
+      cameraPosition: {
+        x: round3(bin.worldPosition.x - 4.8),
+        y: 4.9,
+        z: round3(aisleZ + (bin.worldPosition.z <= aisleZ ? 0.55 : -0.55)),
+      },
+      focusPosition: {
+        x: bin.worldPosition.x,
+        y: 0.1,
+        z: round3((bin.worldPosition.z + aisleZ) / 2),
+      },
+    };
+  }
+
+  if (zone.kind === 'RECEIVING') {
+    return {
+      cameraPosition: {
+        x: round3(bin.worldPosition.x + 5.2),
+        y: 4.6,
+        z: round3(bin.worldPosition.z + 2.4),
+      },
+      focusPosition: {
+        x: round3(bin.worldPosition.x + 0.8),
+        y: 0.1,
+        z: bin.worldPosition.z,
+      },
+    };
+  }
+
+  return {
+    cameraPosition: {
+      x: round3(bin.worldPosition.x - 5.4),
+      y: 4.8,
+      z: round3(bin.worldPosition.z + 2.1),
+    },
+    focusPosition: {
+      x: round3(bin.worldPosition.x - 0.8),
+      y: 0.1,
+      z: bin.worldPosition.z,
+    },
+  };
+}
+
+export function getAmrPovInsetSize(viewportWidth: number): {
+  width: number;
+  height: number;
+} {
+  const width = viewportWidth >= 640 ? 264 : 180;
+  return {
+    width,
+    height: Math.round(width * 0.62),
   };
 }

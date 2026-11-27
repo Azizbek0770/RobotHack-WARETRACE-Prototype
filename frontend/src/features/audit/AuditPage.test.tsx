@@ -642,6 +642,34 @@ describe("inventory audit demo flow", () => {
         .length,
     ).toBeGreaterThan(0);
 
+    // Lost-response reconciliation: if server actually persisted the event before response dropped,
+    // clicking Submit again or Reconcile recovers the persisted record without duplicating.
+    const persistedAfterDrop: auditApi.StockObservation = {
+      id: "observation-reconciled-1",
+      audit_id: "audit-1",
+      bin_id: binId,
+      sku_id: skuId,
+      observed_qty: 6,
+      source: "SIMULATED_AMR",
+      observed_by: "sim-amr-01",
+      source_device_id: "sim-amr-01",
+      source_event_id: "sim-amr-a-01-reconciled",
+      source_observed_at: timestamp,
+      classification: "SIMULATED",
+      handling_unit_codes: [],
+      created_at: timestamp,
+    };
+    state.observations.set("audit-1", [persistedAfterDrop]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reconcile from server" }),
+    );
+    expect(
+      await screen.findByLabelText("Persisted AMR observation response"),
+    ).toHaveTextContent("sim-amr-a-01-reconciled");
+    expect(
+      screen.getByRole("button", { name: "Observation persisted" }),
+    ).toBeDisabled();
+
     fireEvent.click(screen.getByRole("button", { name: "Reset AMR" }));
     expect(viewer).toHaveAttribute("data-amr-phase", "IDLE");
     expect(viewer).toHaveAttribute("data-amr-mast", "0");

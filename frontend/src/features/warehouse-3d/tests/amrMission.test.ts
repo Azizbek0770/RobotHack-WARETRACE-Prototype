@@ -5,8 +5,10 @@ import {
 } from '../data/demoWarehouse';
 import {
   AMR_HOME_POSITION,
+  computeAisleCameraFocus,
   createInitialAmrMission,
   deriveSimulatedObservedQty,
+  getAmrPovInsetSize,
   pauseAmrMission,
   planAmrRoute,
   resetAmrMission,
@@ -177,5 +179,19 @@ describe('amrMission', () => {
       binId: 'bin-uuid-custom',
       skuId: 'sku-uuid-2',
     });
+  });
+
+  it('computes unobstructed aisle camera focus and responsive POV inset dimensions', async () => {
+    const provider = new DemoWarehouseProvider();
+    const snapshot = await provider.getWarehouseSnapshot(DEMO_WAREHOUSES[0].id);
+    const binA01 = snapshot.bins.find((bin) => bin.code === 'A-01')!;
+    const focus = computeAisleCameraFocus(snapshot, binA01.id);
+    expect(focus).not.toBeNull();
+    expect(focus!.cameraPosition.x).toBeLessThan(binA01.worldPosition.x);
+    expect(focus!.cameraPosition.z).toBeCloseTo(0.55, 2);
+    expect(focus!.focusPosition.x).toBe(binA01.worldPosition.x);
+
+    expect(getAmrPovInsetSize(1152)).toEqual({ width: 264, height: 164 });
+    expect(getAmrPovInsetSize(480)).toEqual({ width: 180, height: 112 });
   });
 });

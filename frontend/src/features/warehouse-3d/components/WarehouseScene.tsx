@@ -24,6 +24,7 @@ interface WarehouseSceneProps {
   visibleZoneKinds: Record<ZoneKind, boolean>;
   cameraDirective: CameraDirective | null;
   amrVisualization?: AmrVisualizationState | null;
+  showAmrPov?: boolean;
   quality: RenderQuality;
   onSelectBin: (bin: NormalizedBin) => void;
   onHoverBin: (bin: NormalizedBin | null) => void;
@@ -71,6 +72,7 @@ export function WarehouseScene({
   visibleZoneKinds,
   cameraDirective,
   amrVisualization = null,
+  showAmrPov = false,
   quality,
   onSelectBin,
   onHoverBin,
@@ -141,7 +143,11 @@ export function WarehouseScene({
 
       {/* Simulated telescopic-mast AMR */}
       {amrVisualization && (
-        <WarehouseAmr amr={amrVisualization} enableShadows={enableShadows} />
+        <WarehouseAmr
+          amr={amrVisualization}
+          enableShadows={enableShadows}
+          showPovInset={showAmrPov}
+        />
       )}
 
       <SceneCamera directive={cameraDirective} />

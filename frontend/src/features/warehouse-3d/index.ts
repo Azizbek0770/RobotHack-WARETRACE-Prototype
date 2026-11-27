@@ -86,6 +86,7 @@ export {
   AMR_MAST_MAX_STROKE_M,
   AMR_WHEEL_RADIUS_M,
   createInitialAmrMission,
+  computeAisleCameraFocus,
   deriveSimulatedObservedQty,
   pauseAmrMission,
   planAmrRoute,
