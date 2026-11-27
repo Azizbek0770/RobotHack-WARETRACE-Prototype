@@ -3,6 +3,7 @@
 import csv
 import io
 from collections import Counter
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -15,6 +16,7 @@ from app.core.security import require_local_operational_writes
 from app.db.base import utc_now
 from app.models import (
     SKU,
+    AuditDataClassification,
     AuditFinding,
     AuditFindingAction,
     AuditFindingActionType,
@@ -36,6 +38,7 @@ from app.schemas.audit import (
     AuditFindingActionCreate,
     AuditFindingActionRead,
     AuditFindingRead,
+    AuditObservationEventCreate,
     AuditRead,
     AuditSnapshotItem,
     AuditSnapshotRead,
@@ -274,6 +277,26 @@ def record_manual_observation(
     return StockObservationRead.model_validate(records[0])
 
 
+def record_observation_event(
+    db: Session,
+    audit_id: UUID,
+    request: AuditObservationEventCreate,
+) -> StockObservationRead:
+    require_local_operational_writes()
+    parsed = ParsedObservation.model_validate(request.model_dump())
+    records = _record_observations(
+        db,
+        audit_id,
+        [parsed],
+        request.observed_by,
+        StockObservationSource(request.source.value),
+        source_device_id=request.device_id,
+        source_event_id=request.event_id,
+        source_observed_at=request.observed_at,
+    )
+    return StockObservationRead.model_validate(records[0])
+
+
 def import_csv_observations(
     db: Session,
     audit_id: UUID,
@@ -309,11 +332,37 @@ def _record_observations(
     observations: list[ParsedObservation],
     observed_by: str,
     source: StockObservationSource,
+    *,
+    source_device_id: str | None = None,
+    source_event_id: str | None = None,
+    source_observed_at: datetime | None = None,
 ) -> list[StockObservation]:
     try:
         with db.begin():
             audit = _ensure_open_audit(db, audit_id)
+            if (
+                source == StockObservationSource.SIMULATED_AMR
+                and audit.classification != AuditDataClassification.SIMULATED
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Simulated AMR events require a SIMULATED audit",
+                )
             _validate_observation_references(db, audit, observations)
+            if (
+                source_event_id is not None
+                and db.scalar(
+                    select(StockObservation.id).where(
+                        StockObservation.audit_id == audit_id,
+                        StockObservation.source_event_id == source_event_id,
+                    )
+                )
+                is not None
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Observation source event has already been processed",
+                )
             pairs = {(row.bin_id, row.sku_id) for row in observations}
             existing = db.scalars(
                 select(StockObservation).where(
@@ -334,6 +383,9 @@ def _record_observations(
                     observed_qty=observation.observed_qty,
                     source=source,
                     observed_by=observed_by,
+                    source_device_id=source_device_id,
+                    source_event_id=source_event_id,
+                    source_observed_at=source_observed_at,
                     handling_unit_codes=observation.handling_unit_codes,
                     audit=audit,
                 )

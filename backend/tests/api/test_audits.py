@@ -109,6 +109,13 @@ def add_manual_observation(
     )
 
 
+def add_observation_event(client: TestClient, audit_id: str, **event):
+    return client.post(
+        f"/api/v1/audits/{audit_id}/observations/events",
+        json=event,
+    )
+
+
 def test_snapshot_comparison_is_deterministic_and_review_is_recorded(
     client_and_engine,
 ):
@@ -292,6 +299,125 @@ def test_manual_duplicate_and_unknown_references_are_rejected(client_and_engine)
     )
     assert duplicate_key.status_code == 409
     assert client.get(f"/api/v1/audits/{audit['id']}/observations").json()
+
+
+def test_scanner_and_simulated_amr_events_keep_provenance_and_stock_read_only(
+    client_and_engine,
+):
+    client, engine = client_and_engine
+    ids = warehouse_ids(engine)
+    audit = start_audit(client, ids["warehouse"], "device-events")
+    amr_event = {
+        "source": "SIMULATED_AMR",
+        "event_id": "amr-event-0001",
+        "device_id": "sim-amr-01",
+        "observed_at": "2026-11-27T07:45:00Z",
+        "bin_id": str(ids["bin:A-01"]),
+        "sku_id": str(ids["sku:SKU-001"]),
+        "observed_qty": 6,
+        "observed_by": "sim-amr-01",
+    }
+    recorded_amr = add_observation_event(client, audit["id"], **amr_event)
+    assert recorded_amr.status_code == 201, recorded_amr.text
+    assert recorded_amr.json()["source"] == "SIMULATED_AMR"
+    assert recorded_amr.json()["source_device_id"] == "sim-amr-01"
+    assert recorded_amr.json()["source_event_id"] == "amr-event-0001"
+    assert recorded_amr.json()["source_observed_at"] == "2026-11-27T07:45:00Z"
+    assert recorded_amr.json()["classification"] == "SIMULATED"
+
+    duplicate_event = add_observation_event(client, audit["id"], **amr_event)
+    assert duplicate_event.status_code == 409
+    reused_event = add_observation_event(
+        client,
+        audit["id"],
+        **{
+            **amr_event,
+            "event_id": "amr-event-0002",
+            "bin_id": str(ids["bin:A-02"]),
+            "sku_id": str(ids["sku:SKU-002"]),
+        },
+    )
+    assert reused_event.status_code == 201
+    replayed_event_id = add_observation_event(
+        client,
+        audit["id"],
+        **{
+            **amr_event,
+            "bin_id": str(ids["bin:A-04"]),
+            "sku_id": str(ids["sku:SKU-004"]),
+        },
+    )
+    assert replayed_event_id.status_code == 409
+    duplicate_pair = add_observation_event(
+        client,
+        audit["id"],
+        **{**amr_event, "event_id": "amr-event-duplicate-pair"},
+    )
+    assert duplicate_pair.status_code == 409
+
+    scanner_event = {
+        "source": "SCANNER",
+        "event_id": "scanner-event-0001",
+        "device_id": "scanner-01",
+        "observed_at": "2026-11-27T07:46:00+00:00",
+        "bin_id": str(ids["bin:A-03"]),
+        "sku_id": str(ids["sku:SKU-003"]),
+        "observed_qty": 12,
+        "observed_by": "operator-01",
+    }
+    recorded_scanner = add_observation_event(client, audit["id"], **scanner_event)
+    assert recorded_scanner.status_code == 201
+    assert recorded_scanner.json()["source"] == "SCANNER"
+
+    missing_timezone = add_observation_event(
+        client,
+        audit["id"],
+        **{
+            **scanner_event,
+            "event_id": "scanner-event-naive",
+            "observed_at": "2026-11-27T07:46:00",
+        },
+    )
+    assert missing_timezone.status_code == 422
+
+    operational_audit = client.post(
+        "/api/v1/audits",
+        json={
+            "warehouse_id": str(ids["warehouse"]),
+            "request_key": "operational-amr",
+            "started_by": "inventory-operator",
+            "classification": "OPERATIONAL",
+        },
+    )
+    assert operational_audit.status_code == 201
+    simulated_source_on_operational_audit = add_observation_event(
+        client,
+        operational_audit.json()["id"],
+        **{
+            **amr_event,
+            "event_id": "amr-event-operational",
+        },
+    )
+    assert simulated_source_on_operational_audit.status_code == 422
+
+    comparison = client.post(f"/api/v1/audits/{audit['id']}/compare")
+    assert comparison.status_code == 200
+    findings = client.get(f"/api/v1/audits/{audit['id']}/findings").json()
+    amr_finding = next(
+        row for row in findings if row["observation_id"] == recorded_amr.json()["id"]
+    )
+    assert amr_finding["finding_type"] == "MISSING"
+    assert amr_finding["discrepancy_qty"] == -2
+
+    with Session(engine) as db:
+        expected = db.scalar(
+            select(ExpectedInventory).where(
+                ExpectedInventory.bin_id == ids["bin:A-01"],
+                ExpectedInventory.sku_id == ids["sku:SKU-001"],
+            )
+        )
+        assert expected is not None
+        assert (expected.expected_qty, expected.revision) == (8, 1)
 
 
 def test_csv_import_is_validated_atomic_and_marked_as_csv(client_and_engine):

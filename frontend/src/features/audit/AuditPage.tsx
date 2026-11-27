@@ -82,6 +82,19 @@ function typeLabel(type: FindingType): string {
   return type.replaceAll("_", " ");
 }
 
+function observationSourceLabel(observation: StockObservation): string {
+  switch (observation.source) {
+    case "MANUAL":
+      return "Manual";
+    case "CSV":
+      return "CSV import";
+    case "SCANNER":
+      return `Scanner · ${observation.source_device_id}`;
+    case "SIMULATED_AMR":
+      return `Simulated AMR · ${observation.source_device_id} · event ${observation.source_event_id}`;
+  }
+}
+
 function isFindingFilter(value: string): value is FindingFilter {
   return (
     value === "ALL" ||
@@ -244,10 +257,17 @@ export default function AuditPage() {
           findings
             .filter((finding) => finding.finding_type !== "MATCH")
             .map((finding) => observationsById.get(finding.observation_id)?.bin_id)
+            .concat(
+              observations
+                .filter(
+                  (observation) => observation.source === "SIMULATED_AMR",
+                )
+                .map((observation) => observation.bin_id),
+            )
             .filter((id): id is string => Boolean(id)),
         ),
       ),
-    [findings, observationsById],
+    [findings, observations, observationsById],
   );
   const metrics = useMemo(() => {
     const stockResults = findings.filter(
@@ -555,6 +575,25 @@ export default function AuditPage() {
     }
   }
 
+  async function handleRefreshEvidence() {
+    if (!audit) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await reloadAuditEvidence(audit.id);
+      setNotice("Audit evidence refreshed from the server.");
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Unable to refresh audit evidence.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleFindingAction() {
     if (!audit || !selectedFinding) return;
     const action = actionForStatus(selectedFinding.status);
@@ -824,6 +863,14 @@ export default function AuditPage() {
                     {audit.classification}
                   </span>
                   <span className="audit-state-badge">{audit.status}</span>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={saving}
+                    onClick={handleRefreshEvidence}
+                  >
+                    {saving ? "Refreshing…" : "Refresh evidence"}
+                  </button>
                 </div>
               </div>
             )}
@@ -1067,7 +1114,8 @@ export default function AuditPage() {
                                 {compared ? displayDelta(delta) : "Pending"}
                               </td>
                               <td>
-                                {observation.source} · {observation.observed_by}
+                                {observationSourceLabel(observation)} ·{" "}
+                                {observation.observed_by}
                               </td>
                               <td>{observation.classification}</td>
                             </tr>
@@ -1263,7 +1311,7 @@ export default function AuditPage() {
                             <dt>Observation evidence</dt>
                             <dd>
                               {selectedObservation
-                                ? `${selectedObservation.source} by ${selectedObservation.observed_by} · ${new Date(
+                                ? `${observationSourceLabel(selectedObservation)} by ${selectedObservation.observed_by} · ${new Date(
                                     selectedObservation.created_at,
                                   ).toLocaleString()}`
                                 : selectedFinding.observation_id}
@@ -1346,14 +1394,18 @@ export default function AuditPage() {
                 </section>
               )}
 
-              {audit.status === "COMPARED" && (
+              {(audit.status === "COMPARED" ||
+                observations.some(
+                  (observation) => observation.source === "SIMULATED_AMR",
+                )) && (
                 <section className="panel audit-3d-panel">
                   <div className="panel-heading">
                     <div>
                       <h2>Affected warehouse bins</h2>
                       <p className="muted">
-                        Amber outlines show bins tied to non-match findings;
-                        the selected finding uses its persisted bin UUID.
+                        Amber outlines show non-match findings and bins with
+                        simulated AMR observations; highlights use persisted
+                        bin UUIDs.
                       </p>
                     </div>
                     <span>{affectedBinIds.length} affected bins</span>

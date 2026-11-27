@@ -12,6 +12,7 @@ from app.schemas.audit import (
     AuditFindingActionCreate,
     AuditFindingActionRead,
     AuditFindingRead,
+    AuditObservationEventCreate,
     AuditRead,
     AuditSnapshotRead,
     AuditStart,
@@ -32,6 +33,7 @@ from app.services.reconciliation import (
     read_audit_snapshot,
     record_finding_action,
     record_manual_observation,
+    record_observation_event,
 )
 
 router = APIRouter(prefix="/audits", tags=["Inventory Audits"])
@@ -80,6 +82,19 @@ def add_observation(
     db: Annotated[Session, Depends(get_db)],
 ) -> StockObservationRead:
     return record_manual_observation(db, audit_id, request)
+
+
+@router.post(
+    "/{audit_id}/observations/events",
+    status_code=201,
+    response_model=StockObservationRead,
+)
+def add_observation_event(
+    audit_id: UUID,
+    request: AuditObservationEventCreate,
+    db: Annotated[Session, Depends(get_db)],
+) -> StockObservationRead:
+    return record_observation_event(db, audit_id, request)
 
 
 @router.post(

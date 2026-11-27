@@ -1,0 +1,11 @@
+{
+  "source": "SIMULATED_AMR",
+  "event_id": "sim-amr-rix-demo-0001",
+  "device_id": "sim-amr-01",
+  "observed_at": "2026-11-27T07:45:00Z",
+  "bin_id": "replace-with-the-A-01-UUID-from-this-demo-database",
+  "sku_id": "replace-with-the-SKU-001-UUID-from-this-demo-database",
+  "observed_qty": 6,
+  "observed_by": "sim-amr-01",
+  "handling_unit_codes": []
+}

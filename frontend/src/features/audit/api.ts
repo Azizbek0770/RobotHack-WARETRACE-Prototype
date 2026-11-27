@@ -2,7 +2,11 @@ import { apiGet, apiPost, apiUpload } from "../../api/client";
 
 export type AuditClassification = "OPERATIONAL" | "SIMULATED";
 export type AuditState = "OPEN" | "COMPARED";
-export type ObservationSource = "MANUAL" | "CSV";
+export type ObservationSource =
+  | "MANUAL"
+  | "CSV"
+  | "SCANNER"
+  | "SIMULATED_AMR";
 export type FindingType =
   | "MISSING"
   | "EXCESS"
@@ -45,6 +49,9 @@ export interface StockObservation {
   observed_qty: number;
   source: ObservationSource;
   observed_by: string;
+  source_device_id: string | null;
+  source_event_id: string | null;
+  source_observed_at: string | null;
   classification: AuditClassification;
   handling_unit_codes: string[];
   created_at: string;
@@ -159,6 +166,17 @@ function isSnapshot(value: unknown): value is AuditSnapshot {
 }
 
 function isObservation(value: unknown): value is StockObservation {
+  const isDeviceSource =
+    isRecord(value) &&
+    (value.source === "SCANNER" || value.source === "SIMULATED_AMR");
+  const hasValidSourceMetadata = isDeviceSource
+    ? isString(value.source_device_id) &&
+      isString(value.source_event_id) &&
+      isString(value.source_observed_at)
+    : isRecord(value) &&
+      value.source_device_id === null &&
+      value.source_event_id === null &&
+      value.source_observed_at === null;
   return (
     isRecord(value) &&
     isString(value.id) &&
@@ -166,8 +184,11 @@ function isObservation(value: unknown): value is StockObservation {
     isString(value.bin_id) &&
     isString(value.sku_id) &&
     isNumber(value.observed_qty) &&
-    (value.source === "MANUAL" || value.source === "CSV") &&
+    ["MANUAL", "CSV", "SCANNER", "SIMULATED_AMR"].includes(
+      String(value.source),
+    ) &&
     isString(value.observed_by) &&
+    hasValidSourceMetadata &&
     (value.classification === "OPERATIONAL" ||
       value.classification === "SIMULATED") &&
     Array.isArray(value.handling_unit_codes) &&

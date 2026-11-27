@@ -245,6 +245,9 @@ beforeEach(() => {
         observed_qty: request.observed_qty,
         source: "MANUAL",
         observed_by: request.observed_by,
+        source_device_id: null,
+        source_event_id: null,
+        source_observed_at: null,
         classification: "SIMULATED",
         handling_unit_codes: [],
         created_at: timestamp,
@@ -309,6 +312,47 @@ beforeEach(() => {
 });
 
 describe("inventory audit demo flow", () => {
+  it("labels simulated AMR evidence and highlights its stable bin ID", async () => {
+    const audit = makeAudit("audit-amr", "simulated-amr-demo");
+    const observation: auditApi.StockObservation = {
+      id: "observation-amr-1",
+      audit_id: audit.id,
+      bin_id: binId,
+      sku_id: skuId,
+      observed_qty: 7,
+      source: "SIMULATED_AMR",
+      observed_by: "sim-amr-01",
+      source_device_id: "sim-amr-01",
+      source_event_id: "amr-event-0001",
+      source_observed_at: timestamp,
+      classification: "SIMULATED",
+      handling_unit_codes: [],
+      created_at: timestamp,
+    };
+    state.audits.set(audit.id, audit);
+    state.observations.set(audit.id, []);
+    vi.mocked(auditApi.listAudits).mockResolvedValue([audit]);
+
+    render(<AuditPage />);
+    const sessionSelect = await screen.findByLabelText("Audit session");
+    await waitFor(() => {
+      expect(sessionSelect).toBeEnabled();
+    });
+    fireEvent.change(sessionSelect, { target: { value: audit.id } });
+    expect(await screen.findByText(/No observations yet/)).toBeInTheDocument();
+
+    state.observations.set(audit.id, [observation]);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh evidence" }));
+    expect(
+      await screen.findByText(
+        "Simulated AMR · sim-amr-01 · event amr-event-0001 · sim-amr-01",
+      ),
+    ).toBeInTheDocument();
+    const viewer = await screen.findByTestId("audit-warehouse-viewer");
+    expect(viewer).toHaveAttribute("data-highlighted-bin-ids", binId);
+    expect(screen.getByText(/SIMULATED RECORDS/)).toBeInTheDocument();
+  });
+
   it("compares correct and discrepant counts, resolves evidence, and highlights the stable bin ID", async () => {
     render(<AuditPage />);
 

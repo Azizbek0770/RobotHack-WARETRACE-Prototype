@@ -46,6 +46,8 @@ as operational features.
 - The audit screen supports SIMULATED or OPERATIONAL sessions, manual counts,
   validated CSV import, snapshot comparison, finding evidence, and recorded
   supervisor review/resolution.
+- Audit observations can also record scanner or explicitly simulated AMR event
+  provenance; these are not hardware integrations and never adjust stock.
 - Non-matching audit findings highlight their persisted bin IDs in the 3D view.
 
 ### API and data

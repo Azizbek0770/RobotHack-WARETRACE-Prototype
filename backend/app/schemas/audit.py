@@ -1,6 +1,7 @@
 """Request and response contracts for inventory audits."""
 
-from datetime import datetime
+from datetime import UTC, datetime
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -69,6 +70,51 @@ class StockObservationCreate(BaseModel):
         return normalized
 
 
+class AuditObservationEventSource(str, Enum):
+    SCANNER = "SCANNER"
+    SIMULATED_AMR = "SIMULATED_AMR"
+
+
+class AuditObservationEventCreate(BaseModel):
+    source: AuditObservationEventSource
+    event_id: str = Field(min_length=1, max_length=120)
+    device_id: str = Field(min_length=1, max_length=120)
+    observed_at: datetime
+    bin_id: UUID
+    sku_id: UUID
+    observed_qty: int = Field(ge=0)
+    observed_by: str = Field(min_length=3, max_length=120)
+    handling_unit_codes: list[str] = Field(default_factory=list, max_length=200)
+
+    @field_validator("observed_at")
+    @classmethod
+    def require_timezone(cls, observed_at: datetime) -> datetime:
+        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+            raise ValueError("observed_at must include a timezone")
+        return observed_at.astimezone(UTC)
+
+    @field_validator("event_id", "device_id")
+    @classmethod
+    def strip_identifiers(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Event and device identifiers cannot be blank")
+        return normalized
+
+    @field_validator("observed_by")
+    @classmethod
+    def normalize_observed_by(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 3:
+            raise ValueError("observed_by must contain at least 3 characters")
+        return normalized
+
+    @field_validator("handling_unit_codes")
+    @classmethod
+    def validate_handling_unit_codes(cls, codes: list[str]) -> list[str]:
+        return StockObservationCreate.validate_handling_unit_codes(codes)
+
+
 class StockObservationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -79,9 +125,24 @@ class StockObservationRead(BaseModel):
     observed_qty: int
     source: StockObservationSource
     observed_by: str
+    source_device_id: str | None
+    source_event_id: str | None
+    source_observed_at: datetime | None
     classification: AuditDataClassification
     handling_unit_codes: list[str]
     created_at: datetime
+
+    @field_validator("source_observed_at")
+    @classmethod
+    def normalize_source_timestamp(
+        cls,
+        observed_at: datetime | None,
+    ) -> datetime | None:
+        if observed_at is None:
+            return None
+        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+            observed_at = observed_at.replace(tzinfo=UTC)
+        return observed_at.astimezone(UTC)
 
 
 class ObservationImportResult(BaseModel):

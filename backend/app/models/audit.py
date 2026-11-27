@@ -40,6 +40,8 @@ class AuditStatus(str, Enum):
 class StockObservationSource(str, Enum):
     MANUAL = "MANUAL"
     CSV = "CSV"
+    SCANNER = "SCANNER"
+    SIMULATED_AMR = "SIMULATED_AMR"
 
 
 class AuditFindingType(str, Enum):
@@ -176,6 +178,11 @@ class StockObservation(IdentityTimestampMixin, Base):
             "sku_id",
             name="uq_stock_observation_audit_bin_sku",
         ),
+        UniqueConstraint(
+            "audit_id",
+            "source_event_id",
+            name="uq_stock_observation_source_event",
+        ),
         CheckConstraint(
             "observed_qty >= 0",
             name="ck_stock_observation_qty_nonnegative",
@@ -183,6 +190,17 @@ class StockObservation(IdentityTimestampMixin, Base):
         CheckConstraint(
             "length(observed_by) >= 3",
             name="ck_stock_observation_observed_by",
+        ),
+        CheckConstraint(
+            "(source IN ('SCANNER', 'SIMULATED_AMR') "
+            "AND source_device_id IS NOT NULL "
+            "AND source_event_id IS NOT NULL "
+            "AND source_observed_at IS NOT NULL) OR "
+            "(source IN ('MANUAL', 'CSV') "
+            "AND source_device_id IS NULL "
+            "AND source_event_id IS NULL "
+            "AND source_observed_at IS NULL)",
+            name="ck_stock_observation_source_metadata",
         ),
     )
 
@@ -215,6 +233,12 @@ class StockObservation(IdentityTimestampMixin, Base):
         nullable=False,
     )
     observed_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_device_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_event_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_observed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     handling_unit_codes: Mapped[list[str]] = mapped_column(
         JSON,
         nullable=False,
